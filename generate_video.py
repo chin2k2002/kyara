@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import AudioFileClip, ImageSequenceClip
+from moviepy import AudioFileClip, ImageSequenceClip
 
 
 def generate_speech(text: str, voice_sample: str, output_audio: str, language: str = "ja") -> None:
