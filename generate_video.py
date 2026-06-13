@@ -19,9 +19,24 @@ from PIL import Image, ImageDraw, ImageFont
 from moviepy import AudioFileClip, ImageSequenceClip
 
 
+def convert_to_wav(input_path: str) -> str:
+    """m4a など wav 以外の音声を wav に変換する。"""
+    input_path = Path(input_path)
+    if input_path.suffix.lower() == ".wav":
+        return str(input_path)
+    wav_path = input_path.with_suffix(".wav")
+    clip = AudioFileClip(str(input_path))
+    clip.write_audiofile(str(wav_path), logger=None)
+    clip.close()
+    print(f"音声を変換しました: {wav_path}")
+    return str(wav_path)
+
+
 def generate_speech(text: str, voice_sample: str, output_audio: str, language: str = "ja") -> None:
     """XTTS-v2 で音声クローニングしてテキストを読み上げる。"""
     from TTS.api import TTS
+
+    voice_sample = convert_to_wav(voice_sample)
 
     print("モデルをロード中... (初回は数分かかる場合があります)")
     tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
