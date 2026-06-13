@@ -108,7 +108,7 @@ def create_video(text: str, audio_path: str, output_path: str, fps: int = 24) ->
     frames = make_subtitle_frames(text, duration=duration, fps=fps)
 
     video_clip = ImageSequenceClip(frames, fps=fps)
-    video_clip = video_clip.set_audio(audio_clip)
+    video_clip = video_clip.with_audio(audio_clip)
 
     print(f"動画をエンコード中: {output_path}")
     video_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", logger=None)
