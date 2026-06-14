@@ -21,6 +21,7 @@ from pathlib import Path
 BASE = Path(__file__).parent
 MIMIC_DIR = BASE / "MimicMotion"
 REF_VIDEO = BASE / "presenter_reference.mp4"
+REF_VIDEO_FALLBACK = BASE / "MimicMotion" / "assets" / "example_data" / "videos" / "pose1.mp4"
 
 
 def convert_to_wav(input_path: str) -> str:
@@ -58,15 +59,17 @@ def generate_avatar(photo: str, audio_duration: float, output_video: str) -> Non
     if not MIMIC_DIR.exists():
         print("エラー: MimicMotion が見つかりません。先に setup_mimicmotion.py を実行してください。")
         sys.exit(1)
-    if not REF_VIDEO.exists():
+    ref_video = REF_VIDEO if REF_VIDEO.exists() else REF_VIDEO_FALLBACK
+    if not ref_video.exists():
         print("エラー: 参照動画が見つかりません。先に setup_mimicmotion.py を実行してください。")
         sys.exit(1)
+    print(f"参照動画: {ref_video}")
 
     print("全身アバター動画を生成中 (数分かかります)...")
     cmd = [
         sys.executable, "inference.py",
         "--inference_config", "configs/test.yaml",
-        "--ref_video_path", str(REF_VIDEO),
+        "--ref_video_path", str(ref_video),
         "--ref_image_path", str(Path(photo).resolve()),
         "--save_path", str(Path(output_video).resolve()),
     ]
