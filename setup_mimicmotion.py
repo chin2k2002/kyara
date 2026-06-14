@@ -41,7 +41,7 @@ def main():
 
     # 2. 依存ライブラリ
     print("\n依存ライブラリをインストール中...")
-    run(f'py -3.11 -m pip install -r "{MIMIC_DIR / "requirements.txt"}"')
+    run(f'py -3.11 -m pip install diffusers transformers accelerate omegaconf einops imageio imageio-ffmpeg av onnxruntime')
     run(f'py -3.11 -m pip install huggingface_hub diffusers accelerate')
 
     # 3. モデルをダウンロード
