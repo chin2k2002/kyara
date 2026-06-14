@@ -65,17 +65,47 @@ def generate_avatar(photo: str, audio_duration: float, output_video: str) -> Non
         sys.exit(1)
     print(f"参照動画: {ref_video}")
 
+    # 設定ファイルを動的に生成
+    num_frames = max(72, int(audio_duration * 15) + 10)
+    config_content = f"""base_model_path: stabilityai/stable-video-diffusion-img2vid-xt-1-1
+ckpt_path: models/MimicMotion_1-1.pth
+
+test_case:
+  - ref_video_path: {str(ref_video).replace(chr(92), '/')}
+    ref_image_path: {str(Path(photo).resolve()).replace(chr(92), '/')}
+    num_frames: {num_frames}
+    resolution: 576
+    frames_overlap: 6
+    num_inference_steps: 25
+    noise_aug_strength: 0
+    guidance_scale: 2.0
+    sample_stride: 2
+    fps: 15
+    seed: 42
+"""
+    config_path = MIMIC_DIR / "configs" / "inference_tmp.yaml"
+    config_path.write_text(config_content, encoding="utf-8")
+
     print("全身アバター動画を生成中 (数分かかります)...")
+    output_dir = Path(output_video).parent / "_mimic_output"
     cmd = [
         sys.executable, "inference.py",
-        "--inference_config", "configs/test.yaml",
-        "--ref_video_path", str(ref_video),
-        "--ref_image_path", str(Path(photo).resolve()),
-        "--save_path", str(Path(output_video).resolve()),
+        "--inference_config", "configs/inference_tmp.yaml",
+        "--output_dir", str(output_dir),
     ]
     result = subprocess.run(cmd, cwd=str(MIMIC_DIR))
     if result.returncode != 0:
         print("MimicMotion の実行に失敗しました")
+        sys.exit(1)
+
+    # 生成された動画を output_video にコピー
+    import glob, shutil
+    generated = sorted(glob.glob(str(output_dir / "**" / "*.mp4"), recursive=True))
+    if generated:
+        shutil.copy2(generated[-1], output_video)
+        print(f"アバター動画を保存: {output_video}")
+    else:
+        print("生成された動画が見つかりませんでした")
         sys.exit(1)
 
 
