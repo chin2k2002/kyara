@@ -48,32 +48,47 @@ def main():
     print("\nモデルをダウンロード中...")
     models_dir = MIMIC_DIR / "models"
 
+    from huggingface_hub import hf_hub_download
+
     # MimicMotion checkpoint
+    models_dir.mkdir(parents=True, exist_ok=True)
     mimic_ckpt = models_dir / "MimicMotion_1-1.pth"
-    download(
-        "https://huggingface.co/tencent/MimicMotion/resolve/main/MimicMotion_1-1.pth",
-        mimic_ckpt,
-    )
+    if not mimic_ckpt.exists():
+        print("  MimicMotion モデルをダウンロード中...")
+        hf_hub_download(
+            repo_id="tencent/MimicMotion",
+            filename="MimicMotion_1-1.pth",
+            local_dir=str(models_dir),
+        )
 
     # DWPose (姿勢推定)
     dwpose_dir = models_dir / "DWPose"
-    download(
-        "https://huggingface.co/yzd-v/DWPose/resolve/main/dw-ll_ucoco_384.onnx",
-        dwpose_dir / "dw-ll_ucoco_384.onnx",
-    )
-    download(
-        "https://huggingface.co/yzd-v/DWPose/resolve/main/det_for_pose_rtmdet_l.onnx",
-        dwpose_dir / "det_for_pose_rtmdet_l.onnx",
-    )
+    dwpose_dir.mkdir(parents=True, exist_ok=True)
+    for fname in ["dw-ll_ucoco_384.onnx", "det_for_pose_rtmdet_l.onnx"]:
+        if not (dwpose_dir / fname).exists():
+            print(f"  DWPose {fname} をダウンロード中...")
+            hf_hub_download(
+                repo_id="yzd-v/DWPose",
+                filename=fname,
+                local_dir=str(dwpose_dir),
+            )
+        else:
+            print(f"  スキップ (既存): {fname}")
 
-    # プレゼン参照動画（フリー素材）
+    # プレゼン参照動画
     ref_video = BASE / "presenter_reference.mp4"
     if not ref_video.exists():
         print("\nプレゼン参照動画をダウンロード中...")
-        download(
-            "https://huggingface.co/tencent/MimicMotion/resolve/main/assets/demo/pose_video_3.mp4",
-            ref_video,
+        hf_hub_download(
+            repo_id="tencent/MimicMotion",
+            filename="assets/demo/demo3.mp4",
+            local_dir=str(BASE),
+            local_dir_use_symlinks=False,
         )
+        import shutil
+        demo = BASE / "assets" / "demo" / "demo3.mp4"
+        if demo.exists():
+            shutil.copy2(demo, ref_video)
 
     print("\nセットアップ完了！")
     print("次のコマンドで全身プレゼン動画を生成できます:")
