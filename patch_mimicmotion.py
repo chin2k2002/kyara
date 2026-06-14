@@ -4,31 +4,23 @@ from pathlib import Path
 BASE = Path(__file__).parent
 MIMIC_DIR = BASE / "MimicMotion"
 
-utils_path = MIMIC_DIR / "mimicmotion" / "utils" / "utils.py"
-if not utils_path.exists():
+if not MIMIC_DIR.exists():
     print("エラー: MimicMotion が見つかりません。setup_mimicmotion.py を先に実行してください。")
     exit(1)
 
+# 1. utils.py: torchvision.write_video → imageio
+utils_path = MIMIC_DIR / "mimicmotion" / "utils" / "utils.py"
 text = utils_path.read_text(encoding="utf-8")
-
 if "imageio" not in text:
     text = text.replace(
         "from torchvision.io import write_video",
         "import imageio\nimport numpy as _np"
     )
-    # write_video(path, frames, fps) の呼び出しを置き換え
-    # MimicMotion では通常 save_to_mp4 関数内で使われる
-    text = text.replace(
-        "write_video(",
-        "_write_video_imageio("
-    )
-    # ヘルパー関数を追加
-    helper = '''
+    text = text.replace("write_video(", "_write_video_imageio(")
+    text = text + '''
 
 def _write_video_imageio(filename, video_array, fps, **kwargs):
-    """torchvision.write_video の代替実装"""
-    import imageio
-    import numpy as _np
+    import imageio, numpy as _np
     if hasattr(video_array, 'numpy'):
         frames = video_array.numpy()
     else:
@@ -39,12 +31,32 @@ def _write_video_imageio(filename, video_array, fps, **kwargs):
     for frame in frames:
         writer.append_data(frame)
     writer.close()
-
 '''
-    # ファイルの先頭のimportの後に追加
-    text = text + helper
-
     utils_path.write_text(text, encoding="utf-8")
     print(f"パッチ適用: {utils_path}")
 else:
-    print("すでにパッチ済みです")
+    print(f"utils.py: 適用済み")
+
+# 2. loader.py: safe_globals(*list) → safe_globals(list) + weights_only=False
+loader_path = MIMIC_DIR / "mimicmotion" / "utils" / "loader.py"
+text = loader_path.read_text(encoding="utf-8")
+if "weights_only=False" not in text:
+    text = text.replace(
+        "with torch.serialization.safe_globals(*allowed_modules):\n            checkpoint = torch.load(infer_config.ckpt_path, map_location=\"cpu\", weights_only=True)",
+        "checkpoint = torch.load(infer_config.ckpt_path, map_location=\"cpu\", weights_only=False)"
+    )
+    # fallback: simpler replacement
+    if "weights_only=False" not in text:
+        text = text.replace(
+            "weights_only=True",
+            "weights_only=False"
+        )
+        text = text.replace(
+            "with torch.serialization.safe_globals(*allowed_modules):",
+            "if True:"
+        )
+    loader_path.write_text(text, encoding="utf-8")
+    print(f"パッチ適用: {loader_path}")
+else:
+    print(f"loader.py: 適用済み")
+
