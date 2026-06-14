@@ -64,7 +64,7 @@ def main():
     # DWPose (姿勢推定)
     dwpose_dir = models_dir / "DWPose"
     dwpose_dir.mkdir(parents=True, exist_ok=True)
-    for fname in ["dw-ll_ucoco_384.onnx", "det_for_pose_rtmdet_l.onnx"]:
+    for fname in ["dw-ll_ucoco_384.onnx", "yolox_l.onnx"]:
         if not (dwpose_dir / fname).exists():
             print(f"  DWPose {fname} をダウンロード中...")
             hf_hub_download(
