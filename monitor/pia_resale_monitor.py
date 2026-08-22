@@ -60,9 +60,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import sys
 import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -98,6 +100,36 @@ USER_AGENT = (
 
 LOG_FILE = Path(__file__).parent / "matches.log"
 AUTH_STATE_FILE = Path(__file__).parent / "auth_state.json"
+
+
+def notify_ntfy(topic: str, title: str, message: str, click_url: str) -> None:
+    """
+    ntfy.sh経由でスマホに通知を送る（無料・アカウント登録不要）。
+    事前に ntfy アプリ（iOS/Android）で同じ topic を購読しておく必要がある。
+    通知をタップすると click_url がスマホのブラウザで開く。
+    """
+    if not topic:
+        return
+    payload = json.dumps(
+        {
+            "topic": topic,
+            "title": title,
+            "message": message,
+            "click": click_url,
+            "priority": 5,  # 最大優先度（音+バイブ付き）
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            "https://ntfy.sh/",
+            data=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception as e:
+        print(f"(ntfy通知の送信に失敗しました: {e})")
 
 
 def _windows_toast(title: str, message: str) -> None:
@@ -270,6 +302,7 @@ def main() -> None:
     parser.add_argument("--channel", default=None, choices=["chrome", "msedge"], help="バンドル版Chromiumの代わりに、システムにインストール済みのブラウザを使う（例: msedge）。ネットワーク環境によってはこちらの方が繋がりやすいことがある")
     parser.add_argument("--disable-http2", dest="disable_http2", action="store_true", help="HTTP/2を無効化する(ERR_HTTP2_PROTOCOL_ERROR対策)。既定は無効")
     parser.add_argument("--profile-dir", default=None, help="ログイン処理は自動化せず、普段お使いのブラウザで手動ログインした後のプロファイル(ユーザーデータフォルダ)をそのまま使う。指定時は --login/auth_state.json より優先される。詳細はREADME参照")
+    parser.add_argument("--ntfy-topic", default=None, help="ntfy.sh のtopic名を指定すると、条件一致時にスマホへプッシュ通知を送る(要: ntfyアプリで同じtopicを購読)。通知をタップすると対象ページが開く")
     open_group = parser.add_mutually_exclusive_group()
     open_group.add_argument("--open-browser", dest="open_browser", action="store_true", help="条件に一致する出品を検知したら、既定のブラウザで対象ページを自動的に開く（既定で有効）")
     open_group.add_argument("--no-open-browser", dest="open_browser", action="store_false", help="出品検知時にブラウザを自動で開かない")
@@ -384,11 +417,13 @@ def main() -> None:
                             log_match(text)
                         if should_notify:
                             preview = matches[0][:200]
-                            notify(
-                                "ぴあリセール: 条件に一致する出品を検知",
+                            title = "ぴあリセール: 条件に一致する出品を検知"
+                            body = (
                                 f"{args.date} / {args.qty} の条件に一致する出品があります。\n"
-                                f"手動でページを開いて内容を確認し、購入操作はご自身で行ってください。\n\n{preview}",
+                                f"手動でページを開いて内容を確認し、購入操作はご自身で行ってください。\n\n{preview}"
                             )
+                            notify(title, body)
+                            notify_ntfy(args.ntfy_topic, title, body, args.url)
                             if args.open_browser:
                                 try:
                                     webbrowser.open(args.url)

@@ -117,6 +117,30 @@ python pia_resale_monitor.py --show
   開きます**（`--no-open-browser` オプションで無効化できます）。開くのは
   ページの表示までで、購入に進む操作はご自身で行ってください。
 
+## スマホへの通知（ntfy）
+
+PCの前にいなくてもスマホで気づけるように、[ntfy](https://ntfy.sh/) を
+使ったプッシュ通知に対応しています。無料・アカウント登録不要です。
+
+**セットアップ（初回のみ）**
+
+1. スマホに ntfy アプリをインストール（[iOS](https://apps.apple.com/app/ntfy/id1625396347) /
+   [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)）
+2. アプリを開き、「＋」（購読）から**他人に推測されにくい適当な文字列**を
+   topic名として登録する（例: `pia-resale-abc123xyz`）。この文字列を知って
+   いる人は誰でもその通知を受け取れる/送れる仕組みなので、簡単な単語は
+   避けてください。
+
+**実行時に指定**
+
+```bash
+python pia_resale_monitor.py --interval 5 --ntfy-topic "pia-resale-abc123xyz"
+```
+
+条件に一致する出品を検知すると、スマホに通知が届きます。**通知をタップ
+すると、そのまま対象ページがスマホのブラウザで開きます**（購入操作の
+自動化ではなく、ページを開くところまでです）。
+
 ## 免責
 
 本スクリプトは監視・通知のみを行うものです。実行や利用は自己責任で
