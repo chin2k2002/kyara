@@ -99,24 +99,63 @@ LOG_FILE = Path(__file__).parent / "matches.log"
 AUTH_STATE_FILE = Path(__file__).parent / "auth_state.json"
 
 
+def _windows_toast(title: str, message: str) -> None:
+    """
+    Windows用のデスクトップ通知（バルーン通知）をPowerShell経由で表示する。
+    plyerのWindows実装(balloontip)は環境によって別スレッドで例外を出す
+    ことがあるため、より安定するPowerShell + .NET NotifyIcon方式を使う。
+    非同期(Popen)で起動するのでメインループはブロックしない。
+    """
+    def ps_escape(s: str) -> str:
+        return (
+            s.replace("`", "'")
+            .replace('"', "'")
+            .replace("$", "USD")
+            .replace("\n", " ")
+        )
+
+    safe_title = ps_escape(title)
+    safe_message = ps_escape(message)[:250]
+    ps_script = (
+        "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
+        "$n = New-Object System.Windows.Forms.NotifyIcon; "
+        "$n.Icon = [System.Drawing.SystemIcons]::Information; "
+        "$n.Visible = $true; "
+        f'$n.ShowBalloonTip(10000, "{safe_title}", "{safe_message}", '
+        "[System.Windows.Forms.ToolTipIcon]::Info); "
+        "Start-Sleep -Seconds 10; "
+        "$n.Dispose()"
+    )
+    try:
+        import subprocess
+
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception:
+        pass
+
+
 def notify(title: str, message: str) -> None:
     """デスクトップ通知 + PC音 + コンソール表示。失敗しても落ちないようにする。"""
     print("\a", end="", flush=True)  # ターミナルベル
     print(f"\n{'=' * 60}\n[通知] {title}\n{message}\n{'=' * 60}\n", flush=True)
 
-    try:
-        from plyer import notification as plyer_notification
-
-        plyer_notification.notify(title=title, message=message, timeout=15)
-    except Exception:
-        pass
-
     if sys.platform.startswith("win"):
+        _windows_toast(title, message)
         try:
             import winsound
 
             winsound.Beep(1000, 400)
             winsound.Beep(1400, 400)
+        except Exception:
+            pass
+    else:
+        try:
+            from plyer import notification as plyer_notification
+
+            plyer_notification.notify(title=title, message=message, timeout=15)
         except Exception:
             pass
 
