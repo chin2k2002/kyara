@@ -41,6 +41,35 @@ python pia_resale_monitor.py --login
 含まれるため、**他人と共有したりリポジトリにアップロードしたりしないで
 ください**（`.gitignore` で除外済みです）。
 
+### `--login` でログインできない場合
+
+環境によっては、ログイン画面（ticket-auth.pia.jp）側のBot対策により、
+自動操作でのログインがブロックされることがあります
+（`ERR_HTTP2_PROTOCOL_ERROR` 等で失敗する場合）。
+
+この場合、**ログイン自体は自動化せず**、普段お使いのブラウザ（Edge等）
+で人間の手でログインした後のプロファイル（ユーザーデータフォルダ）を
+そのまま読み取り専用の監視に使う方法があります。
+
+1. 普段のEdgeで `https://cloak.pia.jp/resale/item/list?...`（監視対象URL）
+   を開き、いつも通りログインする
+2. Edgeを完全に閉じる（すべてのウィンドウを閉じる）
+3. Edgeのプロファイルフォルダ（既定は
+   `C:\Users\<ユーザー名>\AppData\Local\Microsoft\Edge\User Data`）を、
+   このスクリプト専用にコピーする（元のプロファイルは触らないように、
+   コピーを使うことを推奨します）
+4. コピーしたフォルダを指定して実行する
+
+```bash
+python pia_resale_monitor.py --profile-dir "C:\Users\<ユーザー名>\pia_edge_profile" --channel msedge
+```
+
+`--profile-dir` を指定すると `--login` や `auth_state.json` は使われず、
+指定したプロファイルのCookie（＝人間が手動でログインした結果）がそのまま
+使われます。ログインが自動操作に一切関与しないため、Bot対策の影響を
+受けません。セッションの有効期限が切れたら、手順1〜3をやり直して
+プロファイルを更新してください。
+
 ## 使い方
 
 ```bash

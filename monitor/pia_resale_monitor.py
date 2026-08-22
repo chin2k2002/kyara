@@ -269,6 +269,7 @@ def main() -> None:
     parser.add_argument("--login", action="store_true", help="ブラウザを表示してログインし、セッションを auth_state.json に保存して終了する")
     parser.add_argument("--channel", default=None, choices=["chrome", "msedge"], help="バンドル版Chromiumの代わりに、システムにインストール済みのブラウザを使う（例: msedge）。ネットワーク環境によってはこちらの方が繋がりやすいことがある")
     parser.add_argument("--disable-http2", dest="disable_http2", action="store_true", help="HTTP/2を無効化する(ERR_HTTP2_PROTOCOL_ERROR対策)。既定は無効")
+    parser.add_argument("--profile-dir", default=None, help="ログイン処理は自動化せず、普段お使いのブラウザで手動ログインした後のプロファイル(ユーザーデータフォルダ)をそのまま使う。指定時は --login/auth_state.json より優先される。詳細はREADME参照")
     open_group = parser.add_mutually_exclusive_group()
     open_group.add_argument("--open-browser", dest="open_browser", action="store_true", help="条件に一致する出品を検知したら、既定のブラウザで対象ページを自動的に開く（既定で有効）")
     open_group.add_argument("--no-open-browser", dest="open_browser", action="store_false", help="出品検知時にブラウザを自動で開かない")
@@ -280,12 +281,35 @@ def main() -> None:
     # 一部のネットワーク環境（プロキシ/セキュリティソフトのHTTPS検査等）で
     # HTTP/2使用時に ERR_HTTP2_PROTOCOL_ERROR が発生することがあるため、
     # --disable-http2 で無効化できるようにしてある（既定はオフ）。
-    launch_kwargs = {"args": ["--disable-http2"]} if args.disable_http2 else {}
+    launch_args = []
+    if args.disable_http2:
+        launch_args.append("--disable-http2")
+    launch_kwargs = {"args": launch_args}
     if args.channel:
         launch_kwargs["channel"] = args.channel
 
     with sync_playwright() as p:
-        if args.login:
+        browser = None  # プロファイル直接利用時はpersistent contextがbrowserを兼ねる
+
+        if args.profile_dir:
+            # ログイン処理そのものは自動化せず、普段お使いのブラウザで
+            # 人手でログインした後のプロファイル（Cookie等）をそのまま
+            # 読み取り専用の監視に使う。ブラウザ本体は起動中だと
+            # プロファイルがロックされるため、事前に閉じておくか、
+            # コピーしたプロファイルフォルダを指定すること。
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=args.profile_dir,
+                headless=not args.show,
+                channel=args.channel or "msedge",
+                args=launch_args,
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+        elif args.login:
+            print("--login は自動操作でログイン画面を開くため、環境によっては")
+            print("サイト側のBot対策によりログインできないことがあります。")
+            print("その場合は --login の代わりに --profile-dir を使い、")
+            print("普段のブラウザで手動ログインしたプロファイルを指定してください。")
+            print("詳細は monitor/README.md を参照してください。")
             browser = p.chromium.launch(headless=False, **launch_kwargs)
             context = browser.new_context(user_agent=USER_AGENT, locale="ja-JP")
             page = context.new_page()
@@ -297,16 +321,17 @@ def main() -> None:
             print(f"ログイン状態を保存しました: {AUTH_STATE_FILE}")
             browser.close()
             return
-
-        browser = p.chromium.launch(headless=not args.show, **launch_kwargs)
-        context_kwargs = {"user_agent": USER_AGENT, "locale": "ja-JP"}
-        if AUTH_STATE_FILE.exists():
-            context_kwargs["storage_state"] = str(AUTH_STATE_FILE)
         else:
-            print("(注意: auth_state.json が見つかりません。未ログイン状態で取得します。"
-                  "ログインが必要な場合は先に `python pia_resale_monitor.py --login` を実行してください。)")
-        context = browser.new_context(**context_kwargs)
-        page = context.new_page()
+            browser = p.chromium.launch(headless=not args.show, **launch_kwargs)
+            context_kwargs = {"user_agent": USER_AGENT, "locale": "ja-JP"}
+            if AUTH_STATE_FILE.exists():
+                context_kwargs["storage_state"] = str(AUTH_STATE_FILE)
+            else:
+                print("(注意: auth_state.json が見つかりません。未ログイン状態で取得します。"
+                      "ログインが必要な場合は先に `python pia_resale_monitor.py --login` "
+                      "または `--profile-dir` を使ってください。)")
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
 
         def fetch_rendered_html() -> str:
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
@@ -330,7 +355,7 @@ def main() -> None:
             out_path = Path(__file__).parent / f"page_dump_{dt.datetime.now():%Y%m%d_%H%M%S}.html"
             out_path.write_text(html, encoding="utf-8")
             print(f"HTMLを保存しました: {out_path}")
-            browser.close()
+            (browser or context).close()
             return
 
         print(f"監視開始: {args.url}")
@@ -387,7 +412,7 @@ def main() -> None:
         except KeyboardInterrupt:
             print("\n監視を停止しました。")
         finally:
-            browser.close()
+            (browser or context).close()
 
 
 if __name__ == "__main__":
