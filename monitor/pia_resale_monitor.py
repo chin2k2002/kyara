@@ -12,9 +12,9 @@
 の両方に一致する出品を検知したら、デスクトップ通知・PC音・コンソール表示・
 ログファイル記録でお知らせします。
 
-このスクリプトは「通知」までしか行いません。出品ページを開く／購入に進む／
-決済する、といった操作は一切自動化していません。検知後の操作（購入に進む
-〜決済〜最終購入）は必ずご自身の手で行ってください。
+このスクリプトは「通知」と「対象ページを既定のブラウザで開く」までしか
+行いません。購入に進む／決済する、といった操作は一切自動化していません。
+検知後の操作（購入に進む〜決済〜最終購入）は必ずご自身の手で行ってください。
 
 【重要】対象ページはJavaScriptで一覧データを後から描画するタイプのページ
 のため、素のHTML取得（requests）では中身が空になります。そのため本スク
@@ -63,6 +63,7 @@ import datetime as dt
 import re
 import sys
 import time
+import webbrowser
 from pathlib import Path
 
 from bs4 import BeautifulSoup
@@ -266,6 +267,10 @@ def main() -> None:
     parser.add_argument("--show", action="store_true", help="ブラウザ画面を表示する（デバッグ用）。既定は非表示(headless)")
     parser.add_argument("--dump-html", action="store_true", help="通知はせず、レンダリング後のHTMLをファイルに保存して終了する（構造確認用）")
     parser.add_argument("--login", action="store_true", help="ブラウザを表示してログインし、セッションを auth_state.json に保存して終了する")
+    open_group = parser.add_mutually_exclusive_group()
+    open_group.add_argument("--open-browser", dest="open_browser", action="store_true", help="条件に一致する出品を検知したら、既定のブラウザで対象ページを自動的に開く（既定で有効）")
+    open_group.add_argument("--no-open-browser", dest="open_browser", action="store_false", help="出品検知時にブラウザを自動で開かない")
+    parser.set_defaults(open_browser=True)
     args = parser.parse_args()
 
     date_variants = normalize_date_variants(args.date)
@@ -350,6 +355,11 @@ def main() -> None:
                                 f"{args.date} / {args.qty} の条件に一致する出品があります。\n"
                                 f"手動でページを開いて内容を確認し、購入操作はご自身で行ってください。\n\n{preview}",
                             )
+                            if args.open_browser:
+                                try:
+                                    webbrowser.open(args.url)
+                                except Exception:
+                                    pass
                             last_notified_at = time.monotonic()
                     else:
                         status = "出品なし" if no_item else "出品はあるが条件に一致するものなし"
