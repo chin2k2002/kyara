@@ -223,7 +223,7 @@ def main() -> None:
     parser.add_argument("--qty", default="2枚", help="検知したい枚数の文言（例: 2枚）")
     parser.add_argument("--interval", type=float, default=20.0, help="ポーリング間隔（秒）。既定20秒。短すぎるとアクセス制限のリスクあり")
     parser.add_argument("--remind-interval", type=float, default=60.0, help="条件成立中に再通知する間隔（秒）")
-    parser.add_argument("--render-wait", type=float, default=3.0, help="ページ読込後、JS描画を待つ秒数。既定3秒")
+    parser.add_argument("--render-wait", type=float, default=8.0, help="「出品なし」文言が出るのを待つ最大秒数（出品がある場合はこの秒数分待ってから読み取る）。既定8秒")
     parser.add_argument("--show", action="store_true", help="ブラウザ画面を表示する（デバッグ用）。既定は非表示(headless)")
     parser.add_argument("--dump-html", action="store_true", help="通知はせず、レンダリング後のHTMLをファイルに保存して終了する（構造確認用）")
     parser.add_argument("--login", action="store_true", help="ブラウザを表示してログインし、セッションを auth_state.json に保存して終了する")
@@ -257,17 +257,20 @@ def main() -> None:
 
         def fetch_rendered_html() -> str:
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(int(args.render_wait * 1000))
-            # AJAXでの一覧描画が完了するまで、内容が安定するのを待つ
-            # （読み込み途中の中途半端なタイミングを拾ってしまうのを防ぐ）
-            prev = page.content()
-            for _ in range(3):
-                page.wait_for_timeout(1000)
-                curr = page.content()
-                if curr == prev:
-                    return curr
-                prev = curr
-            return prev
+            # 「出品されたリセールチケットはありません」の文言が出るのを
+            # 直接待つ（早く確定すれば無駄な待ち時間なしで済む）。
+            # ページ内の他の要素（バナー等）が常に変化するため、
+            # HTML全体が「変化しなくなるまで待つ」方式は当てにならなかった。
+            # 出品がある場合はこの文言が出ないためタイムアウトするが、
+            # その場合は render-wait 分待ってから、その時点の内容を返す。
+            try:
+                page.wait_for_function(
+                    "document.body && document.body.innerText.includes('出品されたリセールチケットはありません')",
+                    timeout=int(args.render_wait * 1000),
+                )
+            except PlaywrightTimeoutError:
+                pass
+            return page.content()
 
         if args.dump_html:
             html = fetch_rendered_html()
