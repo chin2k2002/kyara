@@ -258,7 +258,16 @@ def main() -> None:
         def fetch_rendered_html() -> str:
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(int(args.render_wait * 1000))
-            return page.content()
+            # AJAXでの一覧描画が完了するまで、内容が安定するのを待つ
+            # （読み込み途中の中途半端なタイミングを拾ってしまうのを防ぐ）
+            prev = page.content()
+            for _ in range(3):
+                page.wait_for_timeout(1000)
+                curr = page.content()
+                if curr == prev:
+                    return curr
+                prev = curr
+            return prev
 
         if args.dump_html:
             html = fetch_rendered_html()
