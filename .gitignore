@@ -4,3 +4,4 @@ monitor/venv/
 monitor/matches.log
 monitor/.last_state
 monitor/page_dump_*.html
+monitor/auth_state.json

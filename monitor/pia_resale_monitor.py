@@ -25,6 +25,19 @@
     pip install -r requirements.txt
     playwright install chromium
 
+【ログインが必要な場合】
+対象ページはログインしていないと出品内容が表示されない可能性があります。
+まず以下を実行し、開いたブラウザ画面でご自身のアカウントにログインして
+ください。ログインが完了したら、ターミナルに戻ってEnterキーを押すと、
+ログイン状態が auth_state.json に保存され、以降の監視で自動的に使われ
+ます（ログインは初回の1回だけでOKです）。
+
+    python pia_resale_monitor.py --login
+
+※ auth_state.json にはログインセッション情報が含まれます。他人と共有
+  したり、リポジトリにアップロードしたりしないでください（.gitignore
+  で除外済みです）。
+
 【解析ロジックについての注意】
 - 出品の有無・内容判定は、レンダリング後のページテキストを対象に、
   日付表現・枚数表現をテキストベースで探すヒューリスティックです。
@@ -82,6 +95,7 @@ USER_AGENT = (
 )
 
 LOG_FILE = Path(__file__).parent / "matches.log"
+AUTH_STATE_FILE = Path(__file__).parent / "auth_state.json"
 
 
 def notify(title: str, message: str) -> None:
@@ -211,13 +225,34 @@ def main() -> None:
     parser.add_argument("--render-wait", type=float, default=3.0, help="ページ読込後、JS描画を待つ秒数。既定3秒")
     parser.add_argument("--show", action="store_true", help="ブラウザ画面を表示する（デバッグ用）。既定は非表示(headless)")
     parser.add_argument("--dump-html", action="store_true", help="通知はせず、レンダリング後のHTMLをファイルに保存して終了する（構造確認用）")
+    parser.add_argument("--login", action="store_true", help="ブラウザを表示してログインし、セッションを auth_state.json に保存して終了する")
     args = parser.parse_args()
 
     date_variants = normalize_date_variants(args.date)
 
     with sync_playwright() as p:
+        if args.login:
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context(user_agent=USER_AGENT, locale="ja-JP")
+            page = context.new_page()
+            page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
+            print("開いたブラウザ画面でログインしてください。")
+            print("ログインが完了したら、このターミナルに戻ってEnterキーを押してください。")
+            input()
+            context.storage_state(path=str(AUTH_STATE_FILE))
+            print(f"ログイン状態を保存しました: {AUTH_STATE_FILE}")
+            browser.close()
+            return
+
         browser = p.chromium.launch(headless=not args.show)
-        page = browser.new_page(user_agent=USER_AGENT, locale="ja-JP")
+        context_kwargs = {"user_agent": USER_AGENT, "locale": "ja-JP"}
+        if AUTH_STATE_FILE.exists():
+            context_kwargs["storage_state"] = str(AUTH_STATE_FILE)
+        else:
+            print("(注意: auth_state.json が見つかりません。未ログイン状態で取得します。"
+                  "ログインが必要な場合は先に `python pia_resale_monitor.py --login` を実行してください。)")
+        context = browser.new_context(**context_kwargs)
+        page = context.new_page()
 
         def fetch_rendered_html() -> str:
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
