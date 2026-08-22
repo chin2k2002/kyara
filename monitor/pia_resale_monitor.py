@@ -303,11 +303,29 @@ def main() -> None:
     parser.add_argument("--disable-http2", dest="disable_http2", action="store_true", help="HTTP/2を無効化する(ERR_HTTP2_PROTOCOL_ERROR対策)。既定は無効")
     parser.add_argument("--profile-dir", default=None, help="ログイン処理は自動化せず、普段お使いのブラウザで手動ログインした後のプロファイル(ユーザーデータフォルダ)をそのまま使う。指定時は --login/auth_state.json より優先される。詳細はREADME参照")
     parser.add_argument("--ntfy-topic", default=None, help="ntfy.sh のtopic名を指定すると、条件一致時にスマホへプッシュ通知を送る(要: ntfyアプリで同じtopicを購読)。通知をタップすると対象ページが開く")
+    parser.add_argument("--test-notify", action="store_true", help="ページ取得は行わず、通知(デスクトップ通知/ntfy/ブラウザ起動)のテストを1回だけ実行して終了する")
     open_group = parser.add_mutually_exclusive_group()
     open_group.add_argument("--open-browser", dest="open_browser", action="store_true", help="条件に一致する出品を検知したら、既定のブラウザで対象ページを自動的に開く（既定で有効）")
     open_group.add_argument("--no-open-browser", dest="open_browser", action="store_false", help="出品検知時にブラウザを自動で開かない")
     parser.set_defaults(open_browser=True)
     args = parser.parse_args()
+
+    if args.test_notify:
+        title = "ぴあリセール監視: テスト通知"
+        body = (
+            f"これはテスト通知です。条件({args.date} / {args.qty})の一致とは"
+            f"関係なく送信しています。この通知が届けば設定は正しく動いています。"
+        )
+        print("テスト通知を送信します...")
+        notify(title, body)
+        notify_ntfy(args.ntfy_topic, title, body, args.url)
+        if args.open_browser:
+            try:
+                webbrowser.open(args.url)
+            except Exception:
+                pass
+        print("送信しました。デスクトップ通知/スマホ通知/ブラウザが開いたか確認してください。")
+        return
 
     date_variants = normalize_date_variants(args.date)
 
