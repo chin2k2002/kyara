@@ -81,8 +81,9 @@ DEFAULT_URL = (
     "&acptCliCd=ATM063&acptCliCd=ATM073"
 )
 
-# 「該当する商品がありません」的な、出品ゼロを表す代表的な文言
+# 「出品ゼロ」を表す代表的な文言（実際のページで確認済みの文言を優先）
 NO_ITEM_PHRASES = [
+    "出品されたリセールチケットはありません",  # 実際のページで確認済みの正式文言
     "該当する商品がありません",
     "対象の商品がありません",
     "現在お申込みいただける",  # 「現在お申込みいただける商品はありません」等の言い回し対策
@@ -300,7 +301,7 @@ def main() -> None:
                             )
                             last_notified_at = time.monotonic()
                     else:
-                        status = "出品なし（「該当する商品がありません」等）" if no_item else "条件に一致する出品なし"
+                        status = "出品なし" if no_item else "出品はあるが条件に一致するものなし"
                         print(f"[{now}] {status}")
                         last_notified_at = None
 
