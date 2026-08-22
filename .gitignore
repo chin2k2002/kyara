@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+monitor/venv/
+monitor/matches.log
+monitor/.last_state
+monitor/page_dump_*.html
