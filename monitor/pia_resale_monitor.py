@@ -267,6 +267,8 @@ def main() -> None:
     parser.add_argument("--show", action="store_true", help="ブラウザ画面を表示する（デバッグ用）。既定は非表示(headless)")
     parser.add_argument("--dump-html", action="store_true", help="通知はせず、レンダリング後のHTMLをファイルに保存して終了する（構造確認用）")
     parser.add_argument("--login", action="store_true", help="ブラウザを表示してログインし、セッションを auth_state.json に保存して終了する")
+    parser.add_argument("--channel", default=None, choices=["chrome", "msedge"], help="バンドル版Chromiumの代わりに、システムにインストール済みのブラウザを使う（例: msedge）。ネットワーク環境によってはこちらの方が繋がりやすいことがある")
+    parser.add_argument("--disable-http2", dest="disable_http2", action="store_true", help="HTTP/2を無効化する(ERR_HTTP2_PROTOCOL_ERROR対策)。既定は無効")
     open_group = parser.add_mutually_exclusive_group()
     open_group.add_argument("--open-browser", dest="open_browser", action="store_true", help="条件に一致する出品を検知したら、既定のブラウザで対象ページを自動的に開く（既定で有効）")
     open_group.add_argument("--no-open-browser", dest="open_browser", action="store_false", help="出品検知時にブラウザを自動で開かない")
@@ -277,12 +279,14 @@ def main() -> None:
 
     # 一部のネットワーク環境（プロキシ/セキュリティソフトのHTTPS検査等）で
     # HTTP/2使用時に ERR_HTTP2_PROTOCOL_ERROR が発生することがあるため、
-    # 無効化しておく。
-    launch_args = ["--disable-http2"]
+    # --disable-http2 で無効化できるようにしてある（既定はオフ）。
+    launch_kwargs = {"args": ["--disable-http2"]} if args.disable_http2 else {}
+    if args.channel:
+        launch_kwargs["channel"] = args.channel
 
     with sync_playwright() as p:
         if args.login:
-            browser = p.chromium.launch(headless=False, args=launch_args)
+            browser = p.chromium.launch(headless=False, **launch_kwargs)
             context = browser.new_context(user_agent=USER_AGENT, locale="ja-JP")
             page = context.new_page()
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
@@ -294,7 +298,7 @@ def main() -> None:
             browser.close()
             return
 
-        browser = p.chromium.launch(headless=not args.show, args=launch_args)
+        browser = p.chromium.launch(headless=not args.show, **launch_kwargs)
         context_kwargs = {"user_agent": USER_AGENT, "locale": "ja-JP"}
         if AUTH_STATE_FILE.exists():
             context_kwargs["storage_state"] = str(AUTH_STATE_FILE)
