@@ -275,9 +275,14 @@ def main() -> None:
 
     date_variants = normalize_date_variants(args.date)
 
+    # 一部のネットワーク環境（プロキシ/セキュリティソフトのHTTPS検査等）で
+    # HTTP/2使用時に ERR_HTTP2_PROTOCOL_ERROR が発生することがあるため、
+    # 無効化しておく。
+    launch_args = ["--disable-http2"]
+
     with sync_playwright() as p:
         if args.login:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=False, args=launch_args)
             context = browser.new_context(user_agent=USER_AGENT, locale="ja-JP")
             page = context.new_page()
             page.goto(args.url, wait_until="domcontentloaded", timeout=30000)
@@ -289,7 +294,7 @@ def main() -> None:
             browser.close()
             return
 
-        browser = p.chromium.launch(headless=not args.show)
+        browser = p.chromium.launch(headless=not args.show, args=launch_args)
         context_kwargs = {"user_agent": USER_AGENT, "locale": "ja-JP"}
         if AUTH_STATE_FILE.exists():
             context_kwargs["storage_state"] = str(AUTH_STATE_FILE)
