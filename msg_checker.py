@@ -26,7 +26,9 @@ try:
 except ImportError:  # PDF の中身チェックだけ無効にする
     pypdf = None
 
-CONFIG_PATH = Path(__file__).with_name("config.json")
+# exe にしたときは exe と同じフォルダに保存する（__file__ は一時フォルダを指すため）
+APP_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+CONFIG_PATH = APP_DIR / "config.json"
 
 DEFAULT_CONFIG = {
     "own_domains": "",   # 自社ドメイン（社内宛ては「情報」扱い）
@@ -823,6 +825,8 @@ def summary_text(findings):
 
 
 def run_cli(path):
+    if sys.stdout is None:  # 画面なしの exe（--windowed）では文字を出す先が無い
+        sys.exit("--cli はコンソール版（msg_checker_cli.exe）か python で実行してください")
     sys.stdout.reconfigure(encoding="utf-8")
     info, findings = run_checks(path, load_config())
     print(f"件名: {info['subject']}")

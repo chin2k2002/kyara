@@ -19,6 +19,20 @@ python msg_checker.py A.msg        # GUI で起動してすぐチェック
 python msg_checker.py --cli A.msg  # 結果を文字で出力
 ```
 
+## exe にする（Windows）
+
+`build.bat` をダブルクリックするか、次を実行します。`dist\` に exe ができます。
+
+```
+pip install -r requirements.txt pyinstaller
+python -m PyInstaller --onefile --windowed --name msg_checker --collect-all extract_msg msg_checker.py
+python -m PyInstaller --onefile --console  --name msg_checker_cli --collect-all extract_msg msg_checker.py
+```
+
+- `msg_checker.exe`: 画面版。`.msg` をドラッグ＆ドロップしてもチェックできます
+- `msg_checker_cli.exe --cli A.msg`: 文字で結果を出すコンソール版
+- 設定（`config.json`）は exe と同じフォルダに保存されます
+
 ## 主なチェック
 
 - **宛先**: お客様リストにないアドレス、似ているが違うドメイン（打ち間違い）、複数のお客様が混在、Bcc
