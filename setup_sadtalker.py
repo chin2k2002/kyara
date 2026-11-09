@@ -30,8 +30,8 @@ def main():
 
     # 2. 依存ライブラリをインストール
     print("\n依存ライブラリをインストール中...")
-    run(f'py -3.11 -m pip install face_alignment dlib gfpgan realesrgan pydub')
-    run(f'py -3.11 -m pip install -r "{SADTALKER_DIR / "requirements.txt"}"')
+    run(f'"{sys.executable}" -m pip install face_alignment dlib gfpgan realesrgan pydub')
+    run(f'"{sys.executable}" -m pip install -r "{SADTALKER_DIR / "requirements.txt"}"')
 
     # 3. モデルをダウンロード
     print("\nモデルをダウンロード中 (数分かかります)...")

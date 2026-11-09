@@ -7,7 +7,25 @@
 - **XTTS-v2**（Coqui TTS）: 3〜30秒の音声サンプルから声をクローニングしてテキストを読み上げ（日本語対応）
 - **moviepy**: 生成した音声 + テキスト字幕を合成して動画を生成
 
-## 環境構築
+## Windows でのインストール（かんたん）
+
+1. このリポジトリを ZIP でダウンロードして展開します（GitHub の「Code」→「Download ZIP」）。
+   日本語やスペースを含まないフォルダ（例: `C:\kyara`）に置くと安全です。
+2. `install.bat` をダブルクリックします。次のものが自動で入ります。
+   - Python 3.11（無ければ winget で自動インストール）
+   - 専用の仮想環境 `.venv` と、必要なライブラリ一式
+   - PyTorch（NVIDIA GPU があれば GPU 版）
+   - 姿勢推定モデル
+   - アバター動画用の MimicMotion（途中で Y/N を聞かれます。NVIDIA GPU と約 15GB の空きが必要です）
+3. インストール後は次のファイルで使えます。
+
+| ファイル | 使い方 |
+|---|---|
+| `mocap.bat` | ダブルクリックで Web カメラ収録（SPACE で開始/停止、Q で終了） |
+| `guide_mocap.bat` | お手本動画をこの上にドラッグ＆ドロップ → お手本を横に見ながら収録。`<動画名>_motion.mp4` ができます |
+| `avatar.bat` | アバター動画の生成。コマンドプロンプトから `avatar.bat --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --mocap --guide お手本.mov` |
+
+## 環境構築（手動）
 
 ```bash
 pip install -r requirements.txt

@@ -3,3 +3,4 @@ _mimic_output/
 _avatar_*
 MimicMotion/
 __pycache__/
+.venv/

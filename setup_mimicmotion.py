@@ -48,7 +48,7 @@ def main():
 
     # 2. 依存ライブラリ
     print("\n依存ライブラリをインストール中...")
-    run("py -3.11 -m pip install diffusers accelerate omegaconf einops imageio imageio-ffmpeg av onnxruntime huggingface_hub")
+    run(f'"{sys.executable}" -m pip install diffusers accelerate omegaconf einops imageio imageio-ffmpeg av onnxruntime huggingface_hub')
 
     # 3. モデルをダウンロード
     print("\nモデルをダウンロード中...")
