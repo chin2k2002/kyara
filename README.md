@@ -7,23 +7,42 @@
 - **XTTS-v2**（Coqui TTS）: 3〜30秒の音声サンプルから声をクローニングしてテキストを読み上げ（日本語対応）
 - **moviepy**: 生成した音声 + テキスト字幕を合成して動画を生成
 
-## Windows でのインストール（かんたん）
+## Windows 版（アプリ）
+
+[toyxyz/toyxyz_RGBMocap](https://github.com/toyxyz/toyxyz_RGBMocap) と同じく、
+PC に Python や Git を入れなくても、このフォルダの中だけで完結して動きます。
+
+### インストール
 
 1. このリポジトリを ZIP でダウンロードして展開します（GitHub の「Code」→「Download ZIP」）。
-   日本語やスペースを含まないフォルダ（例: `C:\kyara`）に置くと安全です。
-2. `install.bat` をダブルクリックします。次のものが自動で入ります。
-   - Python 3.11（無ければ winget で自動インストール）
-   - 専用の仮想環境 `.venv` と、必要なライブラリ一式
-   - PyTorch（NVIDIA GPU があれば GPU 版）
-   - 姿勢推定モデル
-   - アバター動画用の MimicMotion（途中で Y/N を聞かれます。NVIDIA GPU と約 15GB の空きが必要です）
-3. インストール後は次のファイルで使えます。
+   `C:\kyara` のように、日本語やスペースを含まない短いパスに置くと安全です。
+   git を使う場合は `git clone` でも構いません（`update.cmd` で更新できます）。
+2. `install.cmd` をダブルクリックします。次のものが **このフォルダ内** に入ります。
+   - `.setup\` … uv（パッケージ管理ツール）と専用の Python 3.11
+   - `runtime\` … アプリ用の Python 環境とライブラリ一式（PyTorch は NVIDIA GPU があれば GPU 版）
+   - `models\` … 姿勢推定モデル
+   - 最後に MimicMotion（アバター動画用、約 15GB）を入れるか聞かれます。あとでアプリからも導入できます。
+3. `Kyara.cmd` をダブルクリックするとアプリが起動します。
 
-| ファイル | 使い方 |
+> インストール後にフォルダを移動すると `runtime\` が動かなくなります。その場合は `install.cmd` をもう一度実行してください。
+
+### アプリの使い方
+
+| タブ | できること |
 |---|---|
-| `mocap.bat` | ダブルクリックで Web カメラ収録（SPACE で開始/停止、Q で終了） |
-| `guide_mocap.bat` | お手本動画をこの上にドラッグ＆ドロップ → お手本を横に見ながら収録。`<動画名>_motion.mp4` ができます |
-| `avatar.bat` | アバター動画の生成。コマンドプロンプトから `avatar.bat --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --mocap --guide お手本.mov` |
+| モーション収録 | Web カメラで収録 / 動画ファイルからモーション抽出。お手本動画を指定すると、横に並べて表示しながら収録（お手本の長さで自動収録） |
+| アバター動画 | セリフ・写真・声のサンプルを指定して生成。動きは「既定」「Web カメラで収録」「動画の動きを使う」から選択 |
+| セットアップ | Python / GPU / mediapipe / MimicMotion の状態確認、MimicMotion の導入 |
+
+ログは画面下に表示されます。入力した内容は `kyara_settings.json` に保存され、次回起動時に復元されます。
+
+### その他のファイル
+
+| ファイル | 内容 |
+|---|---|
+| `update.cmd` | 最新版に更新（git clone した場合） |
+| `guide_mocap.bat` | お手本動画をドラッグ＆ドロップ → お手本を見ながら収録 |
+| `mocap.bat` / `avatar.bat` | コマンドラインで使う場合 |
 
 ## 環境構築（手動）
 

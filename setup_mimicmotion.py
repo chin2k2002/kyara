@@ -38,11 +38,33 @@ def hf_download(repo_id: str, local_dir: Path, allow_patterns: list = None) -> N
         hf_hub_download(repo_id=repo_id, filename=f, local_dir=str(local_dir))
 
 
+def download_zip(url: str, dest: Path) -> None:
+    """Git が無い環境向け: GitHub の ZIP を取得して dest に展開する。"""
+    import io
+    import shutil
+    import urllib.request
+    import zipfile
+
+    with urllib.request.urlopen(url) as r:
+        data = r.read()
+    tmp = dest.with_name(dest.name + "_tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        z.extractall(tmp)
+    inner = next(tmp.iterdir())  # MimicMotion-main/
+    shutil.move(str(inner), str(dest))
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     # 1. MimicMotion をクローン
     if not MIMIC_DIR.exists():
         print("MimicMotion をダウンロード中...")
-        run(f'git clone https://github.com/Tencent/MimicMotion "{MIMIC_DIR}"')
+        import shutil
+        if shutil.which("git"):
+            run(f'git clone https://github.com/Tencent/MimicMotion "{MIMIC_DIR}"')
+        else:
+            download_zip("https://github.com/Tencent/MimicMotion/archive/refs/heads/main.zip", MIMIC_DIR)
     else:
         print("MimicMotion はすでにダウンロード済みです")
 
@@ -91,7 +113,7 @@ def main():
 
     print("\nセットアップ完了！")
     print("次のコマンドで全身プレゼン動画を生成できます:")
-    print('  py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --output output.mp4')
+    print('  Kyara.cmd でアプリを起動するか、avatar.bat --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --output output.mp4')
 
 
 if __name__ == "__main__":

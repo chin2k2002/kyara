@@ -4,3 +4,7 @@ _avatar_*
 MimicMotion/
 __pycache__/
 .venv/
+runtime/
+.setup/
+output/
+kyara_settings.json

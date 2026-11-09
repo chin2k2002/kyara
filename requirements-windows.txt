@@ -1,0 +1,13 @@
+# Windows (install.cmd) 用。PyTorch は install.ps1 が先に GPU/CPU 版を入れる。
+# TTS 0.22 には Windows 用ホイールが無いため、後継で同じ "import TTS" が使える coqui-tts を使う。
+# coqui-tts は torch>=2.9 だと torchcodec(+FFmpeg DLL) が必須になるため、torch は 2.8 系に固定する。
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+coqui-tts>=0.27
+moviepy>=1.0.3
+Pillow>=10.0.0
+numpy>=1.24.0
+soundfile
+mediapipe>=0.10.14
+opencv-python>=4.8.0
