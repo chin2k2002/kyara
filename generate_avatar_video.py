@@ -9,6 +9,14 @@
     --voice_sample 録音ファイル.m4a \
     --output output.mp4
 
+自分の動きで動かす（RGB モーションキャプチャ）:
+  # 生成した音声を流しながら Web カメラで動きを収録し、その動きでアバターを動かす
+  py -3.11 generate_avatar_video.py --text "..." --photo 写真.jpg --voice_sample 録音.m4a --mocap
+
+  # 撮影済みの自分の動画（普通の RGB 動画）の動きを使う
+  py -3.11 generate_avatar_video.py --text "..." --photo 写真.jpg --voice_sample 録音.m4a \
+    --motion_video 自撮り動画.mp4
+
 事前に setup_mimicmotion.py を実行してください。
 """
 
@@ -55,11 +63,64 @@ def get_audio_duration(audio_path: str) -> float:
     return d
 
 
-def generate_avatar(photo: str, audio_duration: float, output_video: str) -> None:
+def play_audio_async(audio_path: str):
+    """収録中に音声を流す（ベストエフォート）。停止用の関数を返す。"""
+    import platform
+    import shutil
+    if platform.system() == "Windows":
+        import winsound
+        winsound.PlaySound(audio_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        return lambda: winsound.PlaySound(None, 0)
+    for player in (["afplay"], ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"], ["aplay", "-q"]):
+        if shutil.which(player[0]):
+            proc = subprocess.Popen(player + [audio_path])
+            return proc.terminate
+    print("(音声プレーヤーが見つからないため、音声なしで収録します)")
+    return lambda: None
+
+
+def prepare_motion(args, speech_path: str, duration: float, work_dir: Path) -> Path | None:
+    """--mocap / --motion_video 指定時、RGB モーションキャプチャで参照動画を作る。"""
+    if not (args.mocap or args.motion_video):
+        return None
+    import rgb_mocap
+
+    motion_path = work_dir / "_avatar_motion.mp4"
+    try:
+        if args.mocap:
+            print(f"\nWeb カメラで動きを収録します（{duration:.1f} 秒）。"
+                  "カウントダウン後、流れる音声に合わせて身振りをしてください。")
+            stop = [lambda: None]
+            def on_start():
+                stop[0] = play_audio_async(speech_path)
+            try:
+                summary = rgb_mocap.capture_webcam(motion_path, camera=args.camera, duration=duration,
+                                                   countdown=args.countdown, complexity=args.mocap_model,
+                                                   on_start=on_start)
+            finally:
+                stop[0]()
+        else:
+            print(f"\nモーション動画を解析中: {args.motion_video}")
+            summary = rgb_mocap.process_video(args.motion_video, motion_path, complexity=args.mocap_model,
+                                              max_duration=duration)
+    except RuntimeError as e:
+        print(f"エラー: {e}")
+        sys.exit(1)
+    rgb_mocap.report(summary)
+    if summary["detection_rate"] == 0:
+        print("エラー: モーション動画から人物を検出できませんでした")
+        sys.exit(1)
+    return motion_path
+
+
+def generate_avatar(photo: str, audio_duration: float, output_video: str, motion_video: Path | None = None) -> None:
     if not MIMIC_DIR.exists():
         print("エラー: MimicMotion が見つかりません。先に setup_mimicmotion.py を実行してください。")
         sys.exit(1)
-    ref_video = REF_VIDEO if REF_VIDEO.exists() else REF_VIDEO_FALLBACK
+    if motion_video is not None:
+        ref_video = Path(motion_video).resolve()  # RGB モーションキャプチャで作った参照動画 (30fps)
+    else:
+        ref_video = REF_VIDEO if REF_VIDEO.exists() else REF_VIDEO_FALLBACK
     if not ref_video.exists():
         print("エラー: 参照動画が見つかりません。先に setup_mimicmotion.py を実行してください。")
         sys.exit(1)
@@ -131,7 +192,19 @@ def main():
     parser.add_argument("--voice_sample", required=True, help="声のサンプル音声")
     parser.add_argument("--output", default="avatar_output.mp4", help="出力ファイル名")
     parser.add_argument("--language", default="ja", help="言語コード")
+    motion = parser.add_mutually_exclusive_group()
+    motion.add_argument("--mocap", action="store_true",
+                        help="Web カメラ (RGB) で自分の動きを収録してアバターを動かす")
+    motion.add_argument("--motion_video", help="自分の動きを撮影した RGB 動画を参照モーションに使う")
+    parser.add_argument("--camera", type=int, default=0, help="--mocap で使うカメラ番号")
+    parser.add_argument("--countdown", type=int, default=3, help="--mocap の収録前カウントダウン秒数")
+    parser.add_argument("--mocap_model", choices=["lite", "full", "heavy"], default="full",
+                        help="モーションキャプチャの姿勢推定モデル")
     args = parser.parse_args()
+
+    if args.motion_video and not Path(args.motion_video).exists():
+        print(f"エラー: モーション動画が見つかりません: {args.motion_video}")
+        sys.exit(1)
 
     if not Path(args.photo).exists():
         print(f"エラー: 写真が見つかりません: {args.photo}")
@@ -147,7 +220,8 @@ def main():
     duration = get_audio_duration(speech_path)
     print(f"音声の長さ: {duration:.1f}秒")
 
-    generate_avatar(args.photo, duration, avatar_path)
+    motion_path = prepare_motion(args, speech_path, duration, Path(args.output).resolve().parent)
+    generate_avatar(args.photo, duration, avatar_path, motion_path)
     merge_audio(avatar_path, speech_path, args.output)
 
 

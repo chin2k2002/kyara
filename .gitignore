@@ -1,0 +1,5 @@
+models/
+_mimic_output/
+_avatar_*
+MimicMotion/
+__pycache__/

@@ -62,3 +62,53 @@ python generate_video.py \
 # Ubuntu/Debian の場合
 sudo apt-get install fonts-noto-cjk
 ```
+
+## RGB モーションキャプチャ（自分の動きでアバターを動かす）
+
+深度センサーやマーカーは不要で、普通の Web カメラや撮影済みの動画（RGB）から
+MediaPipe Pose で全身の姿勢を推定し、その動きでアバター（MimicMotion）を動かせます。
+
+### 音声に合わせて Web カメラで収録 → アバター動画を生成
+
+```bash
+py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --mocap
+```
+
+生成された音声の長さぶん、カウントダウン後に自動で収録されます（収録中は生成音声が流れるので、
+それに合わせて身振りをしてください）。
+
+### 撮影済みの自分の動画を使う
+
+```bash
+py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --motion_video 自撮り動画.mp4
+```
+
+| オプション | 説明 | デフォルト |
+|---|---|---|
+| `--mocap` | Web カメラで動きを収録して使う | false |
+| `--motion_video` | 自分の動きを撮影した動画を使う | - |
+| `--camera` | カメラ番号 | `0` |
+| `--countdown` | 収録前のカウントダウン秒数 | `3` |
+| `--mocap_model` | 姿勢推定モデル（`lite` / `full` / `heavy`） | `full` |
+
+### モーションだけを収録・抽出する
+
+```bash
+# Web カメラ（SPACE で開始/停止、Q/ESC で終了）
+py -3.11 rgb_mocap.py --camera 0 --output my_motion.mp4
+
+# 10 秒間を自動収録
+py -3.11 rgb_mocap.py --camera 0 --duration 10 --output my_motion.mp4
+
+# 撮影済み動画から抽出（骨格だけの確認用動画も出力）
+py -3.11 rgb_mocap.py --input 自撮り動画.mp4 --output my_motion.mp4 --skeleton_video
+```
+
+出力ファイル:
+
+- `my_motion.mp4` — 30fps に揃えたモーション参照動画（`--motion_video` にそのまま渡せます）
+- `my_motion_pose.json` — フレームごとの 33 点ランドマーク（画像座標 + 3D ワールド座標）。他ツールでの利用向け
+- `my_motion_skeleton.mp4` — 骨格のみの確認用動画（`--skeleton_video` 指定時）
+
+撮影のコツ: 頭から足まで全身が映るようにカメラから離れ、明るい場所で、背景と服の色が近すぎないようにしてください。
+初回実行時に姿勢推定モデル（数 MB〜30MB）を `models/` に自動ダウンロードします。
