@@ -16,8 +16,11 @@ RGB モーションキャプチャ（深度センサー・マーカー不要）�
   # 10 秒間だけ自動収録（3 秒カウントダウン後に開始）
   py -3.11 rgb_mocap.py --camera 0 --duration 10 --output my_motion.mp4
 
-  # 撮影済み動画からモーションを抽出
+  # 撮影済み動画からモーションを抽出（--start / --duration で区間指定も可）
   py -3.11 rgb_mocap.py --input 自撮り動画.mp4 --output my_motion.mp4 --skeleton_video
+
+  # お手本動画を横に流しながら、その動きを真似して収録（お手本の長さで自動収録）
+  py -3.11 rgb_mocap.py --camera 0 --guide お手本.mov --output my_motion.mp4
 
 収録したモーションでアバター動画を作る:
   py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg \\
@@ -300,8 +303,12 @@ def fit_size(w: int, h: int, max_height: int) -> tuple[int, int]:
 
 def process_video(input_path: str | Path, output: str | Path, *, complexity: str = "full",
                   smooth: bool = True, skeleton_video: bool = False, max_duration: float | None = None,
-                  max_height: int = 1024, fps: float = TARGET_FPS, quiet: bool = False) -> dict:
-    """撮影済み RGB 動画からモーションを抽出し、fps を揃えたモーション動画を書き出す。"""
+                  max_height: int = 1024, fps: float = TARGET_FPS, quiet: bool = False,
+                  start: float = 0.0) -> dict:
+    """撮影済み RGB 動画からモーションを抽出し、fps を揃えたモーション動画を書き出す。
+
+    start 秒目から max_duration 秒ぶんを切り出す。
+    """
     import cv2
 
     cap = cv2.VideoCapture(str(input_path))
@@ -325,8 +332,10 @@ def process_video(input_path: str | Path, output: str | Path, *, complexity: str
             ok, frame = cap.read()
             if not ok:
                 break
-            t_src = src_idx / src_fps
+            t_src = src_idx / src_fps - start
             src_idx += 1
+            if t_src < -1e-6:
+                continue
             if max_duration is not None and t_src >= max_duration:
                 break
             # 出力 fps に合わせてフレームを間引き/複製（時刻ベースのリサンプリング）
@@ -358,17 +367,76 @@ def process_video(input_path: str | Path, output: str | Path, *, complexity: str
 
 
 # ---------------------------------------------------------------------------
+# お手本動画（収録中に横に表示して、その動きを真似してもらう）
+# ---------------------------------------------------------------------------
+
+class GuideVideo:
+    def __init__(self, path: str | Path, start: float = 0.0, mirror: bool = False):
+        import cv2
+
+        self.cap = cv2.VideoCapture(str(path))
+        if not self.cap.isOpened():
+            raise RuntimeError(f"お手本動画を開けません: {path}")
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or TARGET_FPS
+        self.count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        self.start_idx = int(start * self.fps)
+        self.duration = max(0.0, (self.count - self.start_idx) / self.fps) if self.count else None
+        self.mirror = mirror
+        self._idx = None
+        self._frame = None
+
+    def frame_at(self, t: float):
+        """お手本動画の (start + t) 秒目のフレーム。末尾を過ぎたら最後のフレームを保持。"""
+        import cv2
+
+        target = self.start_idx + max(0, int(t * self.fps))
+        if self.count:
+            target = min(target, self.count - 1)
+        if self._idx is None or target < self._idx or target - self._idx > 60:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            self._idx = target - 1
+        while self._idx < target:
+            ok, f = self.cap.read()
+            if not ok:
+                break
+            self._idx += 1
+            self._frame = f
+        if self._frame is not None and self.mirror:
+            return cv2.flip(self._frame, 1)
+        return self._frame
+
+    def compose(self, view, t: float):
+        """プレビューの右側にお手本を並べる。"""
+        import cv2
+        import numpy as np
+
+        g = self.frame_at(t)
+        if g is None:
+            return view
+        h = view.shape[0]
+        g = cv2.resize(g, (max(2, int(g.shape[1] * h / g.shape[0])), h))
+        cv2.putText(g, "GUIDE", (12, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 0), 2, cv2.LINE_AA)
+        return np.hstack([view, g])
+
+    def close(self):
+        self.cap.release()
+
+
+# ---------------------------------------------------------------------------
 # Web カメラから収録
 # ---------------------------------------------------------------------------
 
 def capture_webcam(output: str | Path, *, camera: int = 0, duration: float | None = None,
                    countdown: int = 3, complexity: str = "full", smooth: bool = True,
                    skeleton_video: bool = False, width: int = 1280, height: int = 720,
-                   mirror: bool = True, fps: float = TARGET_FPS, on_start=None) -> dict:
+                   mirror: bool = True, fps: float = TARGET_FPS, on_start=None,
+                   guide_video: str | Path | None = None, guide_start: float = 0.0,
+                   mirror_guide: bool = False) -> dict:
     """Web カメラからリアルタイムで姿勢推定しながらモーションを収録する。
 
     duration を指定するとカウントダウン後に自動で収録を開始し、その秒数で終了する。
     指定しない場合は SPACE で開始/停止。on_start は収録開始時に呼ばれる（音声再生などに使用）。
+    guide_video を指定すると、お手本動画を横に表示し、収録開始と同時に再生する。
     """
     import cv2
 
@@ -385,6 +453,11 @@ def capture_webcam(output: str | Path, *, camera: int = 0, duration: float | Non
     size = fit_size(frame.shape[1], frame.shape[0], 0)
 
     output = Path(output)
+    try:
+        guide = GuideVideo(guide_video, guide_start, mirror_guide) if guide_video else None
+    except RuntimeError:
+        cap.release()
+        raise
     estimator = PoseEstimator(complexity)
     smoother = LandmarkSmoother(smooth)
     rec: MocapRecorder | None = None
@@ -448,6 +521,11 @@ def capture_webcam(output: str | Path, *, camera: int = 0, duration: float | Non
             if lms is None:
                 cv2.putText(view, "no person", (20, size[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                             (0, 200, 255), 2, cv2.LINE_AA)
+            if guide is not None:
+                view = guide.compose(view, (now - rec_start) if rec is not None else 0.0)
+            scale = min(1.0, 1600 / view.shape[1], 900 / view.shape[0])  # 画面に収まるよう表示だけ縮小
+            if scale < 1.0:
+                view = cv2.resize(view, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
             cv2.imshow(win, view)
 
             key = cv2.waitKey(1) & 0xFF
@@ -465,6 +543,8 @@ def capture_webcam(output: str | Path, *, camera: int = 0, duration: float | Non
     finally:
         cap.release()
         estimator.close()
+        if guide is not None:
+            guide.close()
         cv2.destroyAllWindows()
         summary = rec.close() if rec is not None else None
 
@@ -484,6 +564,10 @@ def main():
     parser.add_argument("--output", default="my_motion.mp4", help="出力モーション動画")
     parser.add_argument("--duration", type=float, default=None,
                         help="収録秒数。カメラ: カウントダウン後に自動収録 / 動画: 先頭から切り出し")
+    parser.add_argument("--start", type=float, default=0.0,
+                        help="動画/お手本動画の何秒目から使うか")
+    parser.add_argument("--guide", help="お手本動画。カメラ収録中に横に表示し、その動きを真似して収録する")
+    parser.add_argument("--mirror_guide", action="store_true", help="お手本動画を左右反転して表示（鏡のように真似する）")
     parser.add_argument("--countdown", type=int, default=3, help="自動収録前のカウントダウン秒数")
     parser.add_argument("--model", choices=list(MODEL_URLS), default="full",
                         help="姿勢推定モデル (lite=高速, heavy=高精度)")
@@ -501,12 +585,20 @@ def main():
                 sys.exit(1)
             summary = process_video(args.input, args.output, complexity=args.model,
                                     smooth=not args.no_smooth, skeleton_video=args.skeleton_video,
-                                    max_duration=args.duration)
+                                    max_duration=args.duration, start=args.start)
         else:
-            summary = capture_webcam(args.output, camera=args.camera or 0, duration=args.duration,
+            duration = args.duration
+            if args.guide and duration is None:
+                # お手本の長さに合わせて自動収録
+                g = GuideVideo(args.guide, args.start)
+                duration = g.duration
+                g.close()
+            summary = capture_webcam(args.output, camera=args.camera or 0, duration=duration,
                                      countdown=args.countdown, complexity=args.model,
                                      smooth=not args.no_smooth, skeleton_video=args.skeleton_video,
-                                     width=args.width, height=args.height, mirror=not args.no_mirror)
+                                     width=args.width, height=args.height, mirror=not args.no_mirror,
+                                     guide_video=args.guide, guide_start=args.start,
+                                     mirror_guide=args.mirror_guide)
     except RuntimeError as e:
         print(f"エラー: {e}")
         sys.exit(1)

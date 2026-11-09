@@ -96,13 +96,15 @@ def prepare_motion(args, speech_path: str, duration: float, work_dir: Path) -> P
             try:
                 summary = rgb_mocap.capture_webcam(motion_path, camera=args.camera, duration=duration,
                                                    countdown=args.countdown, complexity=args.mocap_model,
-                                                   on_start=on_start)
+                                                   on_start=on_start, guide_video=args.guide,
+                                                   guide_start=args.motion_start,
+                                                   mirror_guide=args.mirror_guide)
             finally:
                 stop[0]()
         else:
             print(f"\nモーション動画を解析中: {args.motion_video}")
             summary = rgb_mocap.process_video(args.motion_video, motion_path, complexity=args.mocap_model,
-                                              max_duration=duration)
+                                              max_duration=duration, start=args.motion_start)
     except RuntimeError as e:
         print(f"エラー: {e}")
         sys.exit(1)
@@ -196,12 +198,22 @@ def main():
     motion.add_argument("--mocap", action="store_true",
                         help="Web カメラ (RGB) で自分の動きを収録してアバターを動かす")
     motion.add_argument("--motion_video", help="自分の動きを撮影した RGB 動画を参照モーションに使う")
+    parser.add_argument("--motion_start", type=float, default=0.0,
+                        help="--motion_video / --guide の何秒目から使うか")
+    parser.add_argument("--guide", help="--mocap 収録中に横に表示するお手本動画（その動きを真似して収録）")
+    parser.add_argument("--mirror_guide", action="store_true", help="お手本動画を左右反転して表示")
     parser.add_argument("--camera", type=int, default=0, help="--mocap で使うカメラ番号")
     parser.add_argument("--countdown", type=int, default=3, help="--mocap の収録前カウントダウン秒数")
     parser.add_argument("--mocap_model", choices=["lite", "full", "heavy"], default="full",
                         help="モーションキャプチャの姿勢推定モデル")
     args = parser.parse_args()
 
+    if args.guide and not args.mocap:
+        print("エラー: --guide は --mocap と一緒に指定してください")
+        sys.exit(1)
+    if args.guide and not Path(args.guide).exists():
+        print(f"エラー: お手本動画が見つかりません: {args.guide}")
+        sys.exit(1)
     if args.motion_video and not Path(args.motion_video).exists():
         print(f"エラー: モーション動画が見つかりません: {args.motion_video}")
         sys.exit(1)

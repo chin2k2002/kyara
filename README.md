@@ -89,6 +89,9 @@ py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg --voice_
 | `--motion_video` | 自分の動きを撮影した動画を使う | - |
 | `--camera` | カメラ番号 | `0` |
 | `--countdown` | 収録前のカウントダウン秒数 | `3` |
+| `--guide` | `--mocap` 収録中に横に表示するお手本動画 | - |
+| `--mirror_guide` | お手本を左右反転して表示 | false |
+| `--motion_start` | `--motion_video` / `--guide` の何秒目から使うか | `0` |
 | `--mocap_model` | 姿勢推定モデル（`lite` / `full` / `heavy`） | `full` |
 
 ### モーションだけを収録・抽出する
@@ -102,6 +105,26 @@ py -3.11 rgb_mocap.py --camera 0 --duration 10 --output my_motion.mp4
 
 # 撮影済み動画から抽出（骨格だけの確認用動画も出力）
 py -3.11 rgb_mocap.py --input 自撮り動画.mp4 --output my_motion.mp4 --skeleton_video
+```
+
+### お手本動画の動きを取り入れる
+
+映画やゲームの映像、ダンス動画などは、カット割り・アップ・複数人物・エフェクトが多く、
+そのままではモーションとしてきれいに取り出せないことがほとんどです。
+その場合は、お手本動画を横に流しながら自分で同じ動きを演じて収録してください。
+
+```bash
+# お手本の長さぶん自動収録（--start で何秒目からかを指定、--mirror_guide で鏡表示）
+py -3.11 rgb_mocap.py --camera 0 --guide お手本.mov --output my_motion.mp4
+
+# 音声生成 → お手本を見ながら収録 → アバター動画 まで一括で
+py -3.11 generate_avatar_video.py --text "セリフ" --photo 写真.jpg --voice_sample 録音.m4a --mocap --guide お手本.mov
+```
+
+人物の全身が 1 カットで映り続けている動画であれば、区間を指定して直接使うこともできます。
+
+```bash
+py -3.11 generate_avatar_video.py ... --motion_video お手本.mp4 --motion_start 1.2
 ```
 
 出力ファイル:
