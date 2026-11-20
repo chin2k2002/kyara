@@ -26,11 +26,13 @@ SR = 44100
 CHAR_DUR = 0.27      # 1文字あたりの平均表示時間（秒）
 JITTER = 0.05        # 打鍵間隔のゆらぎ（秒）
 LEAD_IN = 0.3        # 最初の無音・黒画面
-GAP = 0.25           # 1文字表示の後、タイトル全体までの間
+GAP = 0.05           # 1文字表示の後、タイトル全体までの間
 TITLE_HOLD = 3.6     # タイトル全体の表示時間
 TAIL = 0.5           # 最後の黒画面
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "lupin_style_title.mp4"
+# 2番目の引数に参考動画/音声を渡すと、その音を切り出して使う（省略時は合成音）
+REF = sys.argv[2] if len(sys.argv) > 2 else None
 # --------------------------------------
 
 
@@ -121,6 +123,36 @@ def big_hit():
     return s / np.max(np.abs(s)) * 0.8
 
 
+def load_ref_sounds(path):
+    """参考音源から打鍵音（複数）と、最後の打鍵＋持続音を切り出す"""
+    raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", str(SR),
+                          "-f", "s16le", "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, "<i2").astype(float) / 32768
+    h = SR // 100
+    e = np.array([np.sqrt(np.mean(x[i:i + h] ** 2)) for i in range(0, len(x) - h, h)])
+    onsets = []
+    for i in range(1, len(e)):
+        if e[i] > 0.05 and e[i - 1] < 0.06 and (not onsets or i - onsets[-1] > 15):
+            onsets.append(i)
+    # 打鍵の後に音が1秒以上途切れず続く最初の打鍵＝締め（打鍵＋持続音）。そこから最後までを使う
+    def sustained(i):
+        return np.all(e[i:i + 100] > 0.03)
+    last = next(i for i in onsets if sustained(i))
+    onsets = [i for i in onsets if i <= last]
+    tail_start = max(0, last * h - int(SR * 0.005))
+    finale = x[tail_start:]
+    hits = []
+    for a, b in zip(onsets[:-1], onsets[1:]):
+        seg = x[max(0, a * h - int(SR * 0.005)): min(b * h, a * h + int(SR * 0.26))].copy()
+        fade = int(SR * 0.03)
+        seg[-fade:] *= np.linspace(1, 0, fade)
+        hits.append(seg)
+    # 弱い・短い断片（打鍵の途中で切れたもの）は除く
+    hits = [hh for hh in hits if len(hh) >= SR * 0.2 and np.abs(hh).max() >= 0.8 * max(np.abs(g).max() for g in hits)]
+    print(f"ref: {len(hits)} hits, finale {len(finale) / SR:.2f}s")
+    return hits, finale
+
+
 def main():
     starts = [LEAD_IN]
     for _ in TOKENS[1:]:
@@ -142,9 +174,15 @@ def main():
     title_frame_img.save(OUT.rsplit(".", 1)[0] + "_title.png")
 
     t_title = chars_end + GAP
-    for st in starts:
-        mix(clack(rng.uniform(0.85, 1.0)), st)
-    mix(big_hit(), t_title)
+    if REF:
+        hits, finale = load_ref_sounds(REF)
+        for k, st in enumerate(starts):
+            mix(hits[k % len(hits)], st)
+        mix(finale, t_title)
+    else:
+        for st in starts:
+            mix(clack(rng.uniform(0.85, 1.0)), st)
+        mix(big_hit(), t_title)
     audio = audio[: int(SR * total)]
     audio = np.clip(audio, -1, 1)
 
