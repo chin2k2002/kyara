@@ -23,10 +23,11 @@ W, H, FPS = 1920, 1080, 30
 FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Black.ttc"
 SR = 44100
 
-CHAR_DUR = 0.17      # 1文字あたりの表示時間（秒）
-LEAD_IN = 0.5        # 最初の無音・黒画面
-GAP = 0.45           # 1文字表示の後、タイトル全体までの間
-TITLE_HOLD = 3.5     # タイトル全体の表示時間
+CHAR_DUR = 0.27      # 1文字あたりの平均表示時間（秒）
+JITTER = 0.05        # 打鍵間隔のゆらぎ（秒）
+LEAD_IN = 0.3        # 最初の無音・黒画面
+GAP = 0.25           # 1文字表示の後、タイトル全体までの間
+TITLE_HOLD = 3.6     # タイトル全体の表示時間
 TAIL = 0.5           # 最後の黒画面
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "lupin_style_title.mp4"
@@ -81,37 +82,51 @@ def lowpass(x, a):
     return y
 
 
+def bandpass(x, lo_a, hi_a):
+    return lowpass(x, hi_a) - lowpass(x, lo_a)
+
+
 def clack(strength=1.0):
-    """タイプライターの打鍵音（金属的なクリック＋低いドスッ）"""
-    n = int(SR * 0.12)
+    """タイプライターの打鍵音（高く硬い「カ・タッ」の2段打ち）"""
+    n = int(SR * 0.2)
     t = np.arange(n) / SR
-    noise = rng.standard_normal(n)
-    hi = noise - lowpass(noise, 0.25)                      # 高域のカチッ
-    click = hi * np.exp(-t * 90)
-    body = lowpass(noise, 0.08) * np.exp(-t * 45) * 2.5    # 中低域のコツッ
-    f0 = rng.uniform(170, 210)
-    thump = np.sin(2 * np.pi * f0 * t) * np.exp(-t * 60) * 0.9
-    ring = np.sin(2 * np.pi * rng.uniform(2600, 3200) * t) * np.exp(-t * 70) * 0.15
-    s = click + body + thump + ring
-    s[: int(SR * 0.0015)] *= np.linspace(0, 1, int(SR * 0.0015))
-    return s / np.max(np.abs(s)) * 0.8 * strength
+    s = np.zeros(n)
+    for delay, amp, decay in [(0.0, 1.0, 55), (rng.uniform(0.07, 0.09), 0.55, 70)]:
+        i = int(delay * SR)
+        m = n - i
+        tt = t[:m]
+        noise = rng.standard_normal(m)
+        hit = bandpass(noise, 0.35, 0.75) * np.exp(-tt * decay)          # 3〜5kHz帯のカチッ
+        hit += np.sin(2 * np.pi * rng.uniform(3800, 4300) * tt) * np.exp(-tt * 40) * 0.25
+        hit += np.sin(2 * np.pi * rng.uniform(140, 180) * tt) * np.exp(-tt * 50) * 0.35
+        s[i:] += hit * amp
+    s[: int(SR * 0.001)] *= np.linspace(0, 1, int(SR * 0.001))
+    return s / np.max(np.abs(s)) * 0.75 * strength
 
 
 def big_hit():
-    """タイトル全体が出る瞬間の重い打撃音＋残響"""
-    n = int(SR * 2.0)
+    """タイトル全体が出たときの低い持続音（約290Hz、ゆっくり減衰）"""
+    n = int(SR * 3.6)
     t = np.arange(n) / SR
-    noise = rng.standard_normal(n)
-    s = lowpass(noise, 0.05) * np.exp(-t * 6) * 3
-    s += (noise - lowpass(noise, 0.3)) * np.exp(-t * 30) * 0.6
-    s += np.sin(2 * np.pi * 70 * t) * np.exp(-t * 4) * 1.2
-    s += np.sin(2 * np.pi * 110 * t) * np.exp(-t * 7) * 0.6
-    s[: int(SR * 0.002)] *= np.linspace(0, 1, int(SR * 0.002))
-    return s / np.max(np.abs(s)) * 0.95
+    f0 = 290.0
+    vib = 1 + 0.004 * np.sin(2 * np.pi * 5.5 * t)
+    ph = 2 * np.pi * f0 * np.cumsum(vib) / SR
+    s = np.sin(ph) + 0.35 * np.sin(2 * ph) + 0.3 * np.sin(3 * ph) + 0.12 * np.sin(5 * ph)
+    s += np.sin(ph / 2) * 0.4
+    env = np.minimum(t / 0.03, 1) * np.where(t < 2.4, 1 - 0.25 * t / 2.4, 0.75 * np.exp(-(t - 2.4) * 3))
+    s *= env
+    # 頭に打鍵音を重ねる
+    c = clack(1.0)
+    s[: len(c)] += c * 1.5
+    return s / np.max(np.abs(s)) * 0.8
 
 
 def main():
-    total = LEAD_IN + len(TOKENS) * CHAR_DUR + GAP + TITLE_HOLD + TAIL
+    starts = [LEAD_IN]
+    for _ in TOKENS[1:]:
+        starts.append(starts[-1] + CHAR_DUR + rng.uniform(-JITTER, JITTER))
+    chars_end = starts[-1] + CHAR_DUR
+    total = chars_end + GAP + TITLE_HOLD + TAIL
     nframes = int(round(total * FPS))
     audio = np.zeros(int(SR * (total + 2.5)))
 
@@ -126,9 +141,9 @@ def main():
     title_frame_img = Image.frombytes("RGB", (W, H), title_img)
     title_frame_img.save(OUT.rsplit(".", 1)[0] + "_title.png")
 
-    t_title = LEAD_IN + len(TOKENS) * CHAR_DUR + GAP
-    for k in range(len(TOKENS)):
-        mix(clack(rng.uniform(0.85, 1.0)), LEAD_IN + k * CHAR_DUR)
+    t_title = chars_end + GAP
+    for st in starts:
+        mix(clack(rng.uniform(0.85, 1.0)), st)
     mix(big_hit(), t_title)
     audio = audio[: int(SR * total)]
     audio = np.clip(audio, -1, 1)
@@ -151,8 +166,8 @@ def main():
         t = fi / FPS
         if t < LEAD_IN:
             frame = black
-        elif t < LEAD_IN + len(TOKENS) * CHAR_DUR:
-            frame = char_imgs[int((t - LEAD_IN) / CHAR_DUR)]
+        elif t < chars_end:
+            frame = char_imgs[max(k for k, st in enumerate(starts) if st <= t)]
         elif t < t_title:
             frame = black
         elif t < t_title + TITLE_HOLD:
