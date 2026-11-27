@@ -366,7 +366,10 @@ class App:
         self.menu.delete(0, "end")
         self.menu.add_command(label="編集", command=lambda: self.edit_entry(e, h[0], e.start, e.end))
         self.menu.add_command(label="削除", command=lambda: self.delete_entry(e))
-        self.menu.tk_popup(ev.x_root, ev.y_root)
+        try:
+            self.menu.tk_popup(ev.x_root, ev.y_root)
+        finally:
+            self.menu.grab_release()  # Windows でメニューが残る/反応しない対策
 
     # --- 変更の反映 ---
     def _commit(self, new: Schedule) -> None:
