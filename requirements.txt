@@ -1,4 +1,5 @@
 pywin32; sys_platform == "win32"
 pystray
 pillow
+opencv-python
 pytest

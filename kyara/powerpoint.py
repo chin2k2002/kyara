@@ -1,8 +1,8 @@
 """PowerPoint(COM)を使ったプレーヤー。Windows + PowerPoint 専用。
 
+- PowerPoint ファイル専用(動画ファイルは videoplayer.py が再生する)。
 - PPT: 全スライドに「枠の表示秒数で自動送り」を設定してループ再生する。
   動画のあるスライドは max(表示秒数, 動画の長さ) にする。
-- 動画ファイル: 1 枚のスライドに全面配置したテンポラリのプレゼンを作って同様に再生する。
 - 音声は常時ミュート。クリックまたは Esc でスライドショーを終了する(再開は上位が制御)。
 - 元ファイルは読み取り専用で開き、保存はしない。
 """
@@ -13,7 +13,7 @@ import os
 import time
 
 from .engine import ERROR, RUNNING, USER_STOPPED, PlaybackError
-from .schedule import Playback, is_video
+from .schedule import Playback
 
 log = logging.getLogger("kyara")
 
@@ -59,10 +59,7 @@ class PowerPointPlayer:
             raise PlaybackError("ファイルが存在しません")
         try:
             app = self._get_app()
-            if is_video(pb.file):
-                self._pres = self._build_video_presentation(app, pb)
-            else:
-                self._pres = self._open_pptx(app, pb)
+            self._pres = self._open_pptx(app, pb)
             s = self._pres.SlideShowSettings
             s.ShowType = PP_SHOW_TYPE_SPEAKER
             s.AdvanceMode = PP_ADVANCE_USE_TIMINGS
@@ -73,6 +70,10 @@ class PowerPointPlayer:
             raise
         except Exception as e:
             self._close()
+            if getattr(e, "args", None) and e.args[0] == -2147221005:
+                raise PlaybackError(
+                    "PowerPoint が見つかりません(未インストール、または COM が使えません)"
+                ) from e
             raise PlaybackError(f"開けません: {e}") from e
         self._started = time.monotonic()
         self._last_pos = 1
@@ -160,22 +161,3 @@ class PowerPointPlayer:
             except Exception:
                 log.exception("動画の設定に失敗しました(スライド %s)", slide.SlideIndex)
         return longest
-
-    def _build_video_presentation(self, app, pb: Playback):
-        pres = app.Presentations.Add(True)
-        slide = pres.Slides.AddSlide(1, pres.SlideMaster.CustomLayouts(7))  # 白紙
-        slide.FollowMasterBackground = False
-        slide.Background.Fill.ForeColor.RGB = 0  # 黒
-        sw, sh = pres.PageSetup.SlideWidth, pres.PageSetup.SlideHeight
-        shape = slide.Shapes.AddMediaObject2(os.path.abspath(pb.file), True,
-                                             False, 0, 0, -1, -1)
-        scale = min(sw / shape.Width, sh / shape.Height)
-        shape.LockAspectRatio = True
-        shape.Width, shape.Height = shape.Width * scale, shape.Height * scale
-        shape.Left, shape.Top = (sw - shape.Width) / 2, (sh - shape.Height) / 2
-        length = self._prepare_media(slide)
-        tr = slide.SlideShowTransition
-        tr.AdvanceOnClick = False
-        tr.AdvanceOnTime = True
-        tr.AdvanceTime = max(1, int(length) + 1)
-        return pres

@@ -7,7 +7,7 @@ import threading
 
 from . import autostart
 from .engine import Controller, setup_logging
-from .powerpoint import PowerPointPlayer
+from .player import RoutingPlayer
 from .schedule import Schedule
 
 
@@ -24,7 +24,7 @@ def main() -> None:
     if not autostart.acquire_single_instance():
         return  # 既に起動中
     schedule = Schedule.load(cfg)
-    ctl = Controller(schedule, PowerPointPlayer())
+    ctl = Controller(schedule, RoutingPlayer())
     stop = threading.Event()
     worker = threading.Thread(target=ctl.run, args=(stop,), daemon=True)
     worker.start()
