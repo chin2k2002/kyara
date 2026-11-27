@@ -4,6 +4,7 @@ from __future__ import annotations
 import colorsys
 import os
 import tkinter as tk
+import tkinter.font as tkfont
 import zlib
 from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
@@ -36,6 +37,17 @@ def list_media(folder: str) -> dict[str, str]:
                 and not n.startswith("~$")):
             out[n] = os.path.join(folder, n)
     return out
+
+
+def ellipsize(font: "tkfont.Font", text: str, max_px: float) -> str:
+    """幅 max_px に収まるよう、末尾を … で省略する。"""
+    if max_px <= 0:
+        return ""
+    if font.measure(text) <= max_px:
+        return text
+    while text and font.measure(text + "…") > max_px:
+        text = text[:-1]
+    return text + "…" if text else ""
 
 
 class _FileField(ttk.Frame):
@@ -184,6 +196,8 @@ class App:
         root.title("kyara - スライドショー スケジューラー")
         root.geometry("980x700")
         root.protocol("WM_DELETE_WINDOW", self.hide)
+        self.f_small = tkfont.Font(family="", size=8)
+        self.f_block = tkfont.Font(family="", size=9)
         self._build()
         self.root.after(100, self._scroll_initial)
         self._periodic()
@@ -251,19 +265,28 @@ class App:
             segs = day_segments(self.schedule, d)
             cv.create_rectangle(x0, 0, x0 + colw, total_h, fill="#f6f6f6", outline="", tags="bg")
             for a, b in free_segments([(s, e) for s, e, _ in segs]):
-                if b - a >= 45:
-                    cv.create_text(x0 + 4, a / 60 * HOUR_H + 4, anchor="nw",
-                                   fill="#aaa", font=("", 8), width=colw - 8,
-                                   text=f"既定: {dflt}")
+                if b - a >= 30:
+                    cv.create_text(
+                        x0 + 4, a / 60 * HOUR_H + 3, anchor="nw",
+                        fill="#aaa", font=self.f_small,
+                        text=ellipsize(self.f_small, f"既定: {dflt}", colw - 8))
             for a, b, e in segs:
                 y0, y1 = a / 60 * HOUR_H, b / 60 * HOUR_H
                 cv.create_rectangle(x0 + 2, y0 + 1, x0 + colw - 2, y1 - 1,
                                     fill=color_for(e.file), outline="#789")
-                cv.create_text(x0 + 6, y0 + 4, anchor="nw", width=colw - 12,
-                               font=("", 9),
-                               text=f"{os.path.basename(e.file)}\n"
-                                    f"{fmt_hm(e.start)}–{fmt_hm(e.end)}  "
-                                    f"{fmt_seconds(e.slide_seconds)}/枚")
+                lines = [os.path.basename(e.file),
+                         f"{fmt_hm(e.start)}–{fmt_hm(e.end)}",
+                         f"{fmt_seconds(e.slide_seconds)}/枚"]
+                line_h = 15
+                n = min(3, int((y1 - y0 - 4) // line_h))  # 低すぎるブロックは文字なし
+                if n == 1:  # 低いブロックは 1 行にまとめる
+                    lines = [f"{lines[0]}  {lines[1]}"]
+                elif n == 2:
+                    lines = [lines[0], f"{lines[1]}  {lines[2]}"]
+                for i, t in enumerate(lines[:max(n, 0)]):
+                    cv.create_text(x0 + 6, y0 + 3 + i * line_h, anchor="nw",
+                                   font=self.f_block,
+                                   text=ellipsize(self.f_block, t, colw - 12))
                 self._rects.append((x0, y0, x0 + colw, y1, e))
         for h in range(25):
             y = h * HOUR_H
