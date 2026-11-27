@@ -1,0 +1,7 @@
+{
+  "default": {"file": "C:\\slides\\default.pptx", "slide_seconds": 60},
+  "entries": [
+    {"days": [0,1,2,3,4], "start": 540, "end": 720, "file": "C:\\slides\\morning.pptx", "slide_seconds": 60},
+    {"days": [0,1,2,3,4], "start": 780, "end": 1080, "file": "C:\\slides\\promo.mp4", "slide_seconds": 60}
+  ]
+}
