@@ -11,19 +11,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install pywin32 pyinstaller pytest
+      - run: python -m pip install pywin32 pystray pillow pyinstaller pytest
       - run: python -m pytest -q
       - run: >
-          python -m PyInstaller --noconfirm --onefile --name kyara
+          python -m PyInstaller --noconfirm --onefile --noconsole --name kyara
           --hidden-import win32timezone --hidden-import pythoncom
-          --hidden-import win32api --collect-submodules win32com
+          --hidden-import win32api --hidden-import pystray._win32
+          --collect-submodules win32com
           run_kyara.py
-      - name: Smoke test (起動して設定なしで終了できること)
+      - name: Smoke test (GUI 付きで起動し、5 秒間落ちないこと)
         shell: pwsh
         run: |
-          $p = Start-Process dist\kyara.exe -PassThru
-          Start-Sleep 5
-          if ($p.HasExited) { throw "kyara.exe が起動直後に終了しました" }
+          $env:APPDATA = "$PWD\smoke_appdata"
+          $p = Start-Process dist\kyara.exe -ArgumentList "--minimized" -PassThru
+          Start-Sleep 6
+          if ($p.HasExited) {
+            Get-Content "$env:APPDATA\kyara\kyara.log" -ErrorAction SilentlyContinue
+            throw "kyara.exe が起動直後に終了しました"
+          }
           Stop-Process $p
       - uses: actions/upload-artifact@v4
         with:

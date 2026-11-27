@@ -105,8 +105,10 @@ def _overlaps(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> bool:
 
 class Schedule:
     def __init__(self, default: Default | None = None,
-                 entries: list[Entry] | None = None) -> None:
+                 entries: list[Entry] | None = None,
+                 folder: str = "") -> None:
         self.default = default
+        self.folder = folder  # GUI のファイル選択に使う素材フォルダ
         self.entries: list[Entry] = []
         for e in entries or []:
             self.add(e)
@@ -129,6 +131,9 @@ class Schedule:
         if not self.can_place(entry, ignore_id=entry.id):
             raise OverlapError("他のスケジュールと時間が重なっています")
         self.entries = [entry if e.id == entry.id else e for e in self.entries]
+
+    def copy(self) -> "Schedule":
+        return Schedule.from_dict(self.to_dict())
 
     def remove(self, entry_id: str) -> None:
         self.entries = [e for e in self.entries if e.id != entry_id]
@@ -182,6 +187,7 @@ class Schedule:
     # --- 保存 ---
     def to_dict(self) -> dict:
         return {
+            "folder": self.folder,
             "default": ({"file": self.default.file,
                          "slide_seconds": self.default.slide_seconds}
                         if self.default else None),
@@ -200,7 +206,7 @@ class Schedule:
                          x.get("slide_seconds", DEFAULT_SLIDE_SECONDS),
                          x.get("id") or uuid.uuid4().hex)
                    for x in data.get("entries", [])]
-        return cls(default, entries)
+        return cls(default, entries, data.get("folder", ""))
 
     def save(self, path: str | Path) -> None:
         p = Path(path)

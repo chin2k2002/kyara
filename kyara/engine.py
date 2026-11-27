@@ -59,6 +59,21 @@ class Controller:
         with self._lock:
             self.schedule = schedule
 
+    def status(self) -> str:
+        # GUI から頻繁に呼ばれるので、再生開始処理中のロックは待たない
+        sup, cur = self._suppressed_until, self._current
+        if sup:
+            return f"停止中(クリックで終了): {sup:%m/%d %H:%M} に再開"
+        if cur is None:
+            return "再生なし(既定ファイルが未設定、または待機中)"
+        kind = "既定" if cur.is_default else "スケジュール"
+        return (f"再生中[{kind}]: {os.path.basename(cur.file)}"
+                f"  ({cur.slide_seconds}秒/枚)")
+
+    def resume(self) -> None:
+        """クリックで終了した状態から、すぐに再開する。"""
+        self._suppressed_until = None
+
     @staticmethod
     def _key(pb: Playback) -> tuple:
         return (pb.file, pb.slide_seconds, pb.entry_id)

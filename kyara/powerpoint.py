@@ -46,7 +46,8 @@ class PowerPointPlayer:
                 return self._app
             except Exception:
                 self._app = None
-        import pythoncom  # noqa: F401  (pywin32)
+        import pythoncom
+        pythoncom.CoInitialize()  # 再生スレッドで COM を使うため
         import win32com.client
         self._app = win32com.client.Dispatch("PowerPoint.Application")
         return self._app
