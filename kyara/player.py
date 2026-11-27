@@ -1,17 +1,32 @@
 """ファイルの種類で再生方法を切り替えるプレーヤー。
 
-動画(.mov/.mp4 等)は PowerPoint なしの OpenCV プレーヤー、
+動画(.mov/.mp4 等)と PDF は PowerPoint なしの OpenCV プレーヤー、
 PowerPoint ファイルは PowerPoint で再生する。
 """
 from __future__ import annotations
 
-from .schedule import Playback, is_video
+import sys
+
+from .schedule import Playback, is_pdf, is_video
+
+
+def powerpoint_available() -> bool:
+    """この PC で PowerPoint(COM)が使えそうか。Windows 以外は True 扱い。"""
+    if sys.platform != "win32":
+        return True
+    try:
+        import winreg
+        winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "PowerPoint.Application"))
+        return True
+    except OSError:
+        return False
 
 
 class RoutingPlayer:
     def __init__(self, ppt=None, video=None) -> None:
         self._ppt = ppt
         self._video = video
+        self._pdf = None
         self._active = None
 
     def _pick(self, pb: Playback):
@@ -20,6 +35,11 @@ class RoutingPlayer:
                 from .videoplayer import VideoPlayer
                 self._video = VideoPlayer()
             return self._video
+        if is_pdf(pb.file):
+            if self._pdf is None:
+                from .pdfplayer import PdfPlayer
+                self._pdf = PdfPlayer()
+            return self._pdf
         if self._ppt is None:
             from .powerpoint import PowerPointPlayer
             self._ppt = PowerPointPlayer()

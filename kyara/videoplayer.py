@@ -1,6 +1,6 @@
-"""動画ファイル(.mov/.mp4 等)用プレーヤー。PowerPoint 不要。
+"""OpenCV の全画面ウィンドウと、動画ファイル(.mov/.mp4 等)用プレーヤー。PowerPoint 不要。
 
-OpenCV で全画面・無音・ループ再生する。クリックまたは Esc で終了。
+全画面・無音。クリックまたは Esc で終了。動画は尺(実時間)を守ってループ再生する。
 """
 from __future__ import annotations
 
@@ -39,7 +39,9 @@ def letterbox(frame, sw: int, sh: int):
                               cv2.BORDER_CONSTANT, value=(0, 0, 0))
 
 
-class _Run:
+class Run:
+    """1 回の再生の状態(再生スレッドと poll() で共有)。"""
+
     def __init__(self) -> None:
         self.stop = threading.Event()
         self.state = RUNNING
@@ -48,30 +50,72 @@ class _Run:
         self.thread: threading.Thread | None = None
 
 
-class VideoPlayer:
-    def __init__(self) -> None:
-        self._run: _Run | None = None
+class Window:
+    """全画面ウィンドウ。作ったスレッドでのみ使うこと(OpenCV の制約)。"""
 
-    def play(self, pb: Playback) -> None:
-        self.stop()
+    def __init__(self, run: Run) -> None:
         import cv2
-        cap = cv2.VideoCapture(pb.file)
-        ok = cap.isOpened()
-        if ok:
-            ok, _ = cap.read()
-        if not ok:
-            cap.release()
-            raise PlaybackError("動画を開けません(ファイルが壊れている、または未対応の形式)")
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        n = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-        log.info("動画: %s  尺=%s 秒 (%.2f fps, %d コマ)", pb.file,
-                 f"{n / fps:.1f}" if fps > 0 and n > 0 else "不明", fps, n)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        run = _Run()
-        run.thread = threading.Thread(target=self._loop, args=(cap, run),
-                                      daemon=True, name="kyara-video")
+        self.cv2, self.run = cv2, run
+        self.started = time.monotonic()
+        cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        try:
+            cv2.setWindowProperty(WIN, cv2.WND_PROP_TOPMOST, 1)
+        except Exception:
+            pass
+
+        def on_mouse(event, *_):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                run.clicked = True
+        cv2.setMouseCallback(WIN, on_mouse)
+        self.sw, self.sh = screen_size()
+
+    def show(self, frame) -> None:
+        self.cv2.imshow(WIN, letterbox(frame, self.sw, self.sh))
+
+    def wait(self, ms: int) -> bool:
+        """ms 待つ。利用者が終了操作をしたら True(state も更新)。"""
+        key = self.cv2.waitKey(max(1, ms))
+        grace_over = time.monotonic() - self.started > CLICK_GRACE_SECONDS
+        if key == 27 or (self.run.clicked and grace_over):
+            self.run.state = USER_STOPPED
+            return True
+        self.run.clicked = self.run.clicked and not grace_over
+        return False
+
+    def close(self) -> None:
+        try:
+            self.cv2.destroyWindow(WIN)
+            self.cv2.waitKey(1)
+        except Exception:
+            pass
+
+
+class _CvPlayerBase:
+    """スレッド管理と Player API の共通部分。"""
+
+    def __init__(self) -> None:
+        self._run: Run | None = None
+
+    def _start(self, target, *args) -> None:
+        run = Run()
+        run.thread = threading.Thread(target=self._guarded, args=(target, run, *args),
+                                      daemon=True, name="kyara-cv")
         self._run = run
         run.thread.start()
+
+    @staticmethod
+    def _guarded(target, run: Run, *args) -> None:
+        win = None
+        try:
+            win = Window(run)
+            target(run, win, *args)
+        except Exception:
+            log.exception("再生中にエラー")
+            run.state = ERROR
+        finally:
+            if win is not None:
+                win.close()
 
     def stop(self) -> None:
         run, self._run = self._run, None
@@ -90,24 +134,29 @@ class VideoPlayer:
         run.wrapped.clear()
         return True
 
-    # --- 再生スレッド(OpenCV の GUI は作ったスレッドでしか触れない) ---
-    def _loop(self, cap, run: _Run) -> None:
+
+class VideoPlayer(_CvPlayerBase):
+    def play(self, pb: Playback) -> None:
+        self.stop()
         import cv2
-        started = time.monotonic()
+        cap = cv2.VideoCapture(pb.file)
+        ok = cap.isOpened()
+        if ok:
+            ok, _ = cap.read()
+        if not ok:
+            cap.release()
+            raise PlaybackError("動画を開けません(ファイルが壊れている、または未対応の形式)")
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        n = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        log.info("動画: %s  尺=%s 秒 (%.2f fps, %d コマ)", pb.file,
+                 f"{n / fps:.1f}" if fps > 0 and n > 0 else "不明", fps, n)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        self._start(self._loop, cap)
+
+    @staticmethod
+    def _loop(run: Run, win: Window, cap) -> None:
+        import cv2
         try:
-            cv2.namedWindow(WIN, cv2.WINDOW_NORMAL)
-            cv2.setWindowProperty(WIN, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-            try:
-                cv2.setWindowProperty(WIN, cv2.WND_PROP_TOPMOST, 1)
-            except Exception:
-                pass
-
-            def on_mouse(event, *_):
-                if event == cv2.EVENT_LBUTTONDOWN:
-                    run.clicked = True
-            cv2.setMouseCallback(WIN, on_mouse)
-
-            sw, sh = screen_size()
             fps = cap.get(cv2.CAP_PROP_FPS)
             interval = 1.0 / fps if 1 <= fps <= 120 else 1 / 30
             pass_start = time.monotonic()  # 今回のループの開始時刻
@@ -128,7 +177,7 @@ class VideoPlayer:
                     continue
                 failures = 0
                 consumed += 1
-                cv2.imshow(WIN, letterbox(frame, sw, sh))
+                win.show(frame)
                 # 動画の時間(尺)を守る: 遅れたらコマを飛ばして実時間に追いつく
                 ts = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
                 due = pass_start + (ts if ts > 0 and ts >= last_ts
@@ -145,19 +194,7 @@ class VideoPlayer:
                     due = pass_start + (ts if ts > 0 else consumed * interval)
                     last_ts = max(last_ts, ts)
                     now = time.monotonic()
-                key = cv2.waitKey(max(1, int((due - now) * 1000)))
-                grace_over = time.monotonic() - started > CLICK_GRACE_SECONDS
-                if key == 27 or (run.clicked and grace_over):
-                    run.state = USER_STOPPED
+                if win.wait(int((due - now) * 1000)):
                     break
-                run.clicked = run.clicked and not grace_over
-        except Exception:
-            log.exception("動画の再生中にエラー")
-            run.state = ERROR
         finally:
             cap.release()
-            try:
-                cv2.destroyWindow(WIN)
-                cv2.waitKey(1)
-            except Exception:
-                pass

@@ -72,7 +72,7 @@ class PowerPointPlayer:
             self._close()
             if getattr(e, "args", None) and e.args[0] == -2147221005:
                 raise PlaybackError(
-                    "PowerPoint が見つかりません(未インストール、または COM が使えません)"
+                    "この PC には PowerPoint がありません。PowerPoint を PDF に書き出して指定してください"
                 ) from e
             raise PlaybackError(f"開けません: {e}") from e
         self._started = time.monotonic()

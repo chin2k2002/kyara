@@ -4,7 +4,10 @@
 仕様は [docs/SPEC.md](docs/SPEC.md)。
 
 ## 使い方 (kyara.exe)
-1. kyara.exe を起動。PowerPoint ファイルの再生には PowerPoint が必要。動画(.mov/.mp4 など)は PowerPoint なしで再生できる。
+1. kyara.exe を起動。
+   - 動画(.mov/.mp4 など)と **PDF** は、PowerPoint なしで再生できる。
+   - PowerPoint ファイル(.pptx)は PowerPoint が入った PC でのみ再生できる。
+     PowerPoint のない PC では、PowerPoint で「ファイル → エクスポート → PDF」に書き出した PDF を指定する(1 ページが 1 スライド、枠の秒数ごとに送られる)。
 2. 「素材フォルダ...」でファイルの置き場所、「既定ファイル...」で空き時間に流すファイルを設定。
 3. 週表示の空き枠をドラッグして枠を追加(ファイル・曜日・時間・1 スライドの表示時間)。
    枠はダブルクリックで編集、右クリックで削除。入っている枠は固定で、重ねて登録はできない。

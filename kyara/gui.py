@@ -13,13 +13,14 @@ from . import autostart
 from .calview import (DAY_NAMES, clamp_range, day_segments, fmt_hm,
                       fmt_seconds, free_segments, is_free, parse_hm,
                       parse_seconds, snap)
+from .player import powerpoint_available
 from .schedule import (DAY, DEFAULT_SLIDE_SECONDS, VIDEO_EXTENSIONS, Default,
                        Entry, Schedule, ScheduleError)
 
 HOUR_H = 44
 LEFT = 54
 HEAD_H = 26
-MEDIA_EXT = {".pptx", ".ppt", ".pptm", ".ppsx", ".pps"} | VIDEO_EXTENSIONS
+MEDIA_EXT = {".pptx", ".ppt", ".pptm", ".ppsx", ".pps", ".pdf"} | VIDEO_EXTENSIONS
 
 
 def color_for(path: str) -> str:
@@ -67,7 +68,7 @@ class _FileField(ttk.Frame):
     def _browse(self) -> None:
         p = filedialog.askopenfilename(
             title="ファイルを選択",
-            filetypes=[("PowerPoint/動画", " ".join("*" + e for e in sorted(MEDIA_EXT))),
+            filetypes=[("PowerPoint/PDF/動画", " ".join("*" + e for e in sorted(MEDIA_EXT))),
                        ("すべて", "*.*")])
         if p:
             self.var.set(p)
@@ -87,6 +88,14 @@ class _FileField(ttk.Frame):
                              "一覧から選んでください")
         if not os.path.isfile(path):
             raise ValueError(f"ファイルが見つかりません:\n{path}")
+        if (os.path.splitext(path)[1].lower() not in VIDEO_EXTENSIONS | {".pdf"}
+                and not powerpoint_available()):
+            if not messagebox.askyesno(
+                    "PowerPoint がありません",
+                    "この PC には PowerPoint が入っていないため、このファイルは"
+                    "再生できません。\nPowerPoint を PDF に書き出して指定してください。\n\n"
+                    "このまま登録しますか?", parent=self):
+                raise ValueError("PDF に書き出したファイルを選んでください")
         return os.path.normpath(path)
 
 

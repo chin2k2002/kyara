@@ -31,6 +31,10 @@ def is_video(path: str) -> bool:
     return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
 
+def is_pdf(path: str) -> bool:
+    return Path(path).suffix.lower() == ".pdf"
+
+
 def _check_slide_seconds(sec: int) -> None:
     if not MIN_SLIDE_SECONDS <= sec <= MAX_SLIDE_SECONDS:
         raise ScheduleError(
