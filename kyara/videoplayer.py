@@ -106,7 +106,8 @@ class VideoPlayer:
             sw, sh = screen_size()
             fps = cap.get(cv2.CAP_PROP_FPS)
             interval = 1.0 / fps if 1 <= fps <= 120 else 1 / 30
-            next_t = time.monotonic()
+            pass_start = time.monotonic()  # 今回のループの開始時刻
+            consumed = 0  # このループで読んだコマ数
             failures = 0
             while not run.stop.is_set():
                 ok, frame = cap.read()
@@ -117,14 +118,23 @@ class VideoPlayer:
                         break
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     run.wrapped.set()
+                    pass_start, consumed = time.monotonic(), 0
                     continue
                 failures = 0
+                consumed += 1
                 cv2.imshow(WIN, letterbox(frame, sw, sh))
-                next_t += interval
+                # 動画の時間(尺)を守る: 遅れたらコマを飛ばして実時間に追いつく
+                due = pass_start + consumed * interval
                 now = time.monotonic()
-                if next_t < now - 1:
-                    next_t = now  # 遅れすぎたら追いつくのをやめる
-                key = cv2.waitKey(max(1, int((next_t - now) * 1000)))
+                if now - due > interval:
+                    behind = min(int((now - due) / interval), 60)
+                    for _ in range(behind):
+                        if not cap.grab():
+                            break
+                        consumed += 1
+                    due = pass_start + consumed * interval
+                    now = time.monotonic()
+                key = cv2.waitKey(max(1, int((due - now) * 1000)))
                 grace_over = time.monotonic() - started > CLICK_GRACE_SECONDS
                 if key == 27 or (run.clicked and grace_over):
                     run.state = USER_STOPPED
