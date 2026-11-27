@@ -62,6 +62,10 @@ class VideoPlayer:
         if not ok:
             cap.release()
             raise PlaybackError("動画を開けません(ファイルが壊れている、または未対応の形式)")
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        n = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        log.info("動画: %s  尺=%s 秒 (%.2f fps, %d コマ)", pb.file,
+                 f"{n / fps:.1f}" if fps > 0 and n > 0 else "不明", fps, n)
         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         run = _Run()
         run.thread = threading.Thread(target=self._loop, args=(cap, run),
@@ -108,6 +112,7 @@ class VideoPlayer:
             interval = 1.0 / fps if 1 <= fps <= 120 else 1 / 30
             pass_start = time.monotonic()  # 今回のループの開始時刻
             consumed = 0  # このループで読んだコマ数
+            last_ts = 0.0
             failures = 0
             while not run.stop.is_set():
                 ok, frame = cap.read()
@@ -118,13 +123,17 @@ class VideoPlayer:
                         break
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     run.wrapped.set()
-                    pass_start, consumed = time.monotonic(), 0
+                    log.info("動画 1 周: 実測 %.1f 秒", time.monotonic() - pass_start)
+                    pass_start, consumed, last_ts = time.monotonic(), 0, 0.0
                     continue
                 failures = 0
                 consumed += 1
                 cv2.imshow(WIN, letterbox(frame, sw, sh))
                 # 動画の時間(尺)を守る: 遅れたらコマを飛ばして実時間に追いつく
-                due = pass_start + consumed * interval
+                ts = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+                due = pass_start + (ts if ts > 0 and ts >= last_ts
+                                    else consumed * interval)
+                last_ts = max(last_ts, ts)
                 now = time.monotonic()
                 if now - due > interval:
                     behind = min(int((now - due) / interval), 60)
@@ -132,7 +141,9 @@ class VideoPlayer:
                         if not cap.grab():
                             break
                         consumed += 1
-                    due = pass_start + consumed * interval
+                    ts = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+                    due = pass_start + (ts if ts > 0 else consumed * interval)
+                    last_ts = max(last_ts, ts)
                     now = time.monotonic()
                 key = cv2.waitKey(max(1, int((due - now) * 1000)))
                 grace_over = time.monotonic() - started > CLICK_GRACE_SECONDS
