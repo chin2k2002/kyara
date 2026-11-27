@@ -133,3 +133,14 @@ def test_no_default_stops_in_gap():
     ctl.tick(0)
     c.t = MON + timedelta(hours=10); ctl.tick(1)
     assert p.stops == 1
+
+
+def test_status_shows_error_when_entry_file_fails():
+    ctl, p, c = setup(bad={"a.pptx"})
+    c.t = MON + timedelta(hours=9, minutes=1)
+    ctl.tick(0)
+    assert "a.pptx" in ctl.status() and "再生できません" in ctl.status()
+    assert "既定" in ctl.status()
+    c.t = MON + timedelta(hours=10, minutes=1)
+    ctl.tick(1)  # 枠が終わり既定に戻る → エラー表示は消える
+    assert "⚠" not in ctl.status()

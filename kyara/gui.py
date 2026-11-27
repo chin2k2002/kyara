@@ -55,6 +55,7 @@ class _FileField(ttk.Frame):
 
     def __init__(self, master, folder: str, current: str = "") -> None:
         super().__init__(master)
+        self.folder = folder
         self.map = list_media(folder)
         self.var = tk.StringVar()
         cur = os.path.basename(current) if current in self.map.values() else current
@@ -72,8 +73,21 @@ class _FileField(ttk.Frame):
             self.var.set(p)
 
     def get(self) -> str:
-        t = self.var.get().strip()
-        return self.map.get(t, t)
+        """入力を検証してフルパスで返す。存在しなければ ValueError。"""
+        t = self.var.get().strip().strip('"')
+        if not t:
+            raise ValueError("ファイルを指定してください")
+        path = self.map.get(t)
+        if path is None:
+            path = t
+            if not os.path.isabs(path) and self.folder:
+                path = os.path.join(self.folder, path)
+        if not os.path.isabs(path):
+            raise ValueError("ファイルはフルパスで指定するか、素材フォルダを設定して"
+                             "一覧から選んでください")
+        if not os.path.isfile(path):
+            raise ValueError(f"ファイルが見つかりません:\n{path}")
+        return os.path.normpath(path)
 
 
 class EntryDialog(tk.Toplevel):
@@ -209,6 +223,7 @@ class App:
         ttk.Button(bar, text="既定ファイル...", command=self.edit_default).pack(side="left")
         ttk.Button(bar, text="素材フォルダ...", command=self.pick_folder).pack(side="left", padx=4)
         ttk.Button(bar, text="停止から再開", command=self.ctl.resume).pack(side="left")
+        ttk.Button(bar, text="ログを開く", command=self.open_log).pack(side="left", padx=4)
         self.auto = tk.BooleanVar(value=autostart.is_enabled())
         ttk.Checkbutton(bar, text="Windows 起動時に自動起動", variable=self.auto,
                         command=self.toggle_autostart).pack(side="left", padx=12)
@@ -438,6 +453,13 @@ class App:
             new = self.schedule.copy()
             new.folder = os.path.normpath(p)
             self._commit(new)
+
+    def open_log(self) -> None:
+        log = os.path.join(os.path.dirname(os.path.abspath(self.cfg_path)), "kyara.log")
+        try:
+            os.startfile(log)  # type: ignore[attr-defined]  (Windows)
+        except Exception as e:
+            messagebox.showinfo("ログ", f"ログの場所:\n{log}\n({e})")
 
     def toggle_autostart(self) -> None:
         try:

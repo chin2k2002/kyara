@@ -52,6 +52,7 @@ class Controller:
         self._suppressed_until: datetime | None = None
         self._failed: dict[tuple, tuple[float, float | None]] = {}
         self._wanted: tuple | None = None
+        self._error = ""
         self._lock = threading.Lock()
 
     def set_schedule(self, schedule: Schedule) -> None:
@@ -67,8 +68,11 @@ class Controller:
         if cur is None:
             return "再生なし(既定ファイルが未設定、または待機中)"
         kind = "既定" if cur.is_default else "スケジュール"
-        return (f"再生中[{kind}]: {os.path.basename(cur.file)}"
-                f"  ({cur.slide_seconds}秒/枚)")
+        msg = (f"再生中[{kind}]: {os.path.basename(cur.file)}"
+               f"  ({cur.slide_seconds}秒/枚)")
+        if self._error:
+            msg += f"   ⚠ {self._error}"
+        return msg
 
     def resume(self) -> None:
         """クリックで終了した状態から、すぐに再開する。"""
@@ -89,9 +93,12 @@ class Controller:
             self.player.play(pb)
         except PlaybackError as e:
             log.error("再生できません: %s (%s)", pb.file, e)
+            self._error = f"「{os.path.basename(pb.file)}」を再生できません: {e}"
             self._failed[key] = (mono + RETRY_SECONDS, _mtime(pb.file))
             return False
         self._failed.pop(key, None)
+        if not (self._wanted and self._wanted != key):
+            self._error = ""  # 退避再生(既定)のときはエラーを残す
         self._current = pb
         self._current_mtime = _mtime(pb.file)
         self._pending_reload = False
